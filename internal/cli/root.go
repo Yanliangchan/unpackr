@@ -143,7 +143,7 @@ Run 'unpackr doctor' to check the sandbox and optional tools.`,
 	f.BoolVarP(&fl.Deep, "deep", "d", false, "extended analysis (not implemented in this build)")
 	f.BoolVarP(&fl.Verbose, "verbose", "v", false, "show technical evidence")
 	f.BoolVarP(&fl.Unpack, "unpack", "u", false, "unpack supported packers (UPX) and analyse the result; needs upx installed")
-	f.BoolVarP(&fl.Extract, "extract", "x", false, "extract embedded content (not implemented in this build)")
+	f.BoolVarP(&fl.Extract, "extract", "x", false, "extract embedded content (PyInstaller bundles) without running it")
 	f.BoolVarP(&fl.Reverse, "reverse", "r", false, "use reverse-engineering integrations (not implemented in this build)")
 	f.BoolVarP(&fl.Compare, "compare", "c", false, "compare two files: header, sections, imports, entropy, packing, capabilities, indicators")
 	f.StringVarP(&fl.Output, "output", "o", "", "write a report; format inferred from the extension (.json)")
@@ -185,7 +185,7 @@ func (g *globals) run(cmd *cobra.Command, args []string) error {
 	if plan.Mode == ModeQuick {
 		profile = engine.ProfileQuick
 	}
-	opts := engine.Options{Config: cfg, Profile: profile, Modules: plan.Modules, Unpack: plan.Unpack, ArtifactDir: plan.OutputDir, UserRuleDir: userRuleDir()}
+	opts := engine.Options{Config: cfg, Profile: profile, Modules: plan.Modules, Unpack: plan.Unpack, Extract: plan.Extract, ArtifactDir: plan.OutputDir, UserRuleDir: userRuleDir()}
 
 	ctx, stop := signalContext()
 	defer stop()

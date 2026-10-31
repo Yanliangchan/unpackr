@@ -204,7 +204,7 @@ func TestBatchDirectoryAndOutputDir(t *testing.T) {
 
 func TestUnimplementedFeaturesAreRefusedNotFaked(t *testing.T) {
 	p := write(t, t.TempDir(), "s", samplePE(), 0o600)
-	for _, flag := range []string{"-d", "-x", "-r"} {
+	for _, flag := range []string{"-d", "-r"} {
 		r := run(t, "-i", p, flag)
 		if r.code != 4 || r.stdout != "" {
 			t.Errorf("%s: code %d stdout %q", flag, r.code, r.stdout)
@@ -426,5 +426,45 @@ func TestYaraEngineInTerminalAndJSON(t *testing.T) {
 	}
 	if !strings.Contains(o.String(), `"rule": "goish"`) || !strings.Contains(o.String(), `"status": "user"`) {
 		t.Fatal("analyst rule did not run or was mislabelled")
+	}
+}
+
+func TestExtractThroughTheCLI(t *testing.T) {
+	data := fixtures.BuildPE(fixtures.PESpec{
+		Imports: map[string][]string{"K.dll": {"a"}},
+		Overlay: fixtures.BuildPyInstaller(fixtures.PYISpec{PyVersion: 311, Entries: []fixtures.PYIEntry{
+			{Name: "main", Type: 's', Data: []byte("CODE"), Compress: true},
+			{Name: "../../etc/cron.d/evil", Type: 'x', Data: []byte("x")},
+		}}),
+	})
+	p := write(t, t.TempDir(), "frozen.exe", data, 0o600)
+	out := t.TempDir()
+	r := run(t, "-x", "-i", p, "--output-dir", out, "--format", "json")
+	if r.code != 0 {
+		t.Fatalf("%d %s", r.code, r.stderr)
+	}
+	var rep struct {
+		Extraction struct {
+			Status string `json:"status"`
+			Dir    string `json:"dir"`
+		} `json:"extraction"`
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &rep); err != nil || rep.Extraction.Status != "extracted" {
+		t.Fatalf("%v %s", err, r.stdout)
+	}
+	if !strings.HasPrefix(rep.Extraction.Dir, out) {
+		t.Fatalf("output outside --output-dir: %s", rep.Extraction.Dir)
+	}
+	if _, err := os.Stat(filepath.Join(rep.Extraction.Dir, "main.pyc")); err != nil {
+		t.Fatal(err)
+	}
+	r = run(t, "-x", "-i", p, "--output-dir", out)
+	for _, want := range []string{"Extraction", "PyInstaller", "main", "Skipped entries", "traversal", "never executed"} {
+		if !strings.Contains(r.stdout, want) {
+			t.Errorf("terminal output lacks %q", want)
+		}
+	}
+	if r := run(t, "-x", "-i", fixtures.GoBinary(t, "linux", "amd64"), "--no-banner"); r.code != 0 || !strings.Contains(r.stdout, "not-applicable") {
+		t.Fatalf("%d %s", r.code, r.stdout)
 	}
 }

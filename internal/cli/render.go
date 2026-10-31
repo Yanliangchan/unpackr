@@ -78,6 +78,9 @@ func renderReport(w io.Writer, r *models.Report, verbose bool, st terminal.Style
 	if r.Unpack != nil {
 		renderUnpack(w, r, verbose, st)
 	}
+	if r.Extraction != nil {
+		renderExtraction(w, r.Extraction, verbose, st)
+	}
 
 	if len(r.Warnings) > 0 {
 		h("Warnings")
@@ -587,5 +590,58 @@ func renderYara(w io.Writer, a *models.Analysis, verbose bool, st terminal.Style
 			off = st.Dim(fmt.Sprintf("  @0x%x", m.Matches[0].Offset))
 		}
 		fmt.Fprintf(w, "  %-10s · %s [%s] %s%s\n", "", safe(m.Rule), tag, safe(m.Description), off)
+	}
+}
+
+func renderExtraction(w io.Writer, e *models.Extraction, verbose bool, st terminal.Style) {
+	fmt.Fprintf(w, "\n%s\n", st.Bold(st.Cyan("Extraction")))
+	status := e.Status
+	switch e.Status {
+	case "extracted":
+		status = st.Green(status)
+	case "failed", "rejected":
+		status = st.Red(status)
+	default:
+		status = st.Yellow(status)
+	}
+	fmt.Fprintf(w, "  %-10s %s\n", "Status", status)
+	fmt.Fprintf(w, "  %-10s %s\n", "", safe(e.Message))
+	fmt.Fprintf(w, "  %-10s %s\n", "Supported", st.Dim(strings.Join(e.Supported, ", ")+" (no other container is extracted)"))
+	if e.Status != "extracted" {
+		return
+	}
+	fmt.Fprintf(w, "  %-10s %s, archive at file offset 0x%x, %d bytes\n", "Archive", safe(e.ArchiveFormat), e.ArchiveOffset, e.ArchiveLength)
+	fmt.Fprintf(w, "  %-10s %s %s\n", "Output", safe(e.Dir), st.Dim("(files mode 0600, never executed)"))
+	for _, n := range e.Notes {
+		fmt.Fprintf(w, "  %-10s %s\n", "Note", st.Dim(safe(n)))
+	}
+	fmt.Fprintf(w, "\n  %-11s %-44s %10s  %-14s %s\n", "type", "entry", "size", "content", "sha256")
+	shown := 0
+	skipped := 0
+	for _, en := range e.Entries {
+		if en.Skipped != "" {
+			skipped++
+			continue
+		}
+		if !verbose && shown >= 15 {
+			continue
+		}
+		shown++
+		hash := en.SHA256
+		if len(hash) > 12 {
+			hash = hash[:12]
+		}
+		fmt.Fprintf(w, "  %-11s %-44s %10d  %-14s %s  %s\n", safe(en.TypeName), clip(safe(en.Name), 44), en.Size, clip(safe(en.Format), 14), hash, st.Dim(fmt.Sprintf("@0x%x", en.Offset)))
+	}
+	if total := len(e.Entries) - skipped; total > shown {
+		fmt.Fprintf(w, "  … %d more (use -v)\n", total-shown)
+	}
+	if skipped > 0 {
+		fmt.Fprintf(w, "\n  %s\n", st.Bold(fmt.Sprintf("Skipped entries (%d)", skipped)))
+		for _, en := range e.Entries {
+			if en.Skipped != "" {
+				fmt.Fprintf(w, "  %s %s: %s\n", st.Yellow("!"), clip(safe(en.Name), 50), safe(en.Skipped))
+			}
+		}
 	}
 }

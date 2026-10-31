@@ -23,6 +23,8 @@ type Options struct {
 	Timeout time.Duration
 	// MemoryLimitBytes is applied inside the worker as RLIMIT_AS.
 	MemoryLimitBytes uint64
+	// WritableDirs lists the directories the worker may write (extraction).
+	WritableDirs []string
 	// RequireSandbox makes a result with less than full confinement an error.
 	RequireSandbox bool
 }
@@ -101,7 +103,7 @@ func Run(ctx context.Context, task string, params any, input *os.File, size int6
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start worker: %w", err)
 	}
-	werr := writeFrame(stdin, Request{Task: task, Params: rawParams, InputSize: size, MemoryLimitBytes: o.MemoryLimitBytes})
+	werr := writeFrame(stdin, Request{Task: task, Params: rawParams, InputSize: size, MemoryLimitBytes: o.MemoryLimitBytes, WritableDirs: o.WritableDirs})
 	_ = stdin.Close()
 	waitErr := cmd.Wait()
 	res := &Result{Stderr: errb.buf.String(), Duration: time.Since(start)}

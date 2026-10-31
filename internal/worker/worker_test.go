@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -34,6 +35,19 @@ func init() {
 			out["write_tmp"] = "ALLOWED"
 		} else {
 			out["write_tmp"] = "denied"
+		}
+		return out, nil
+	})
+	Register("write", func(ctx context.Context, in io.ReaderAt, size int64, p json.RawMessage) (any, error) {
+		var targets []string
+		_ = json.Unmarshal(p, &targets)
+		out := map[string]string{}
+		for _, t := range targets {
+			if err := os.WriteFile(t, []byte("x"), 0o600); err == nil {
+				out[t] = "WRITTEN"
+			} else {
+				out[t] = "denied"
+			}
 		}
 		return out, nil
 	})
@@ -131,4 +145,24 @@ func TestUnknownTask(t *testing.T) {
 	if _, err := Run(context.Background(), "nope", nil, nil, 0, Options{Timeout: 20 * time.Second}); err == nil {
 		t.Fatal("expected error")
 	}
+}
+
+func TestWritableDirIsTheOnlyWritableLocation(t *testing.T) {
+	allowed, denied := t.TempDir(), t.TempDir()
+	targets := []string{filepath.Join(allowed, "ok"), filepath.Join(denied, "no"), "/tmp/unpackr-worker-escape"}
+	res, err := Run(context.Background(), "write", targets, nil, 0, Options{Timeout: 20 * time.Second, MemoryLimitBytes: 4 << 30, WritableDirs: []string{allowed}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Sandbox.Level != "full" {
+		t.Skipf("full confinement unavailable: %+v", res.Sandbox)
+	}
+	var out map[string]string
+	if err := json.Unmarshal(res.Raw, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out[targets[0]] != "WRITTEN" || out[targets[1]] != "denied" || out[targets[2]] != "denied" {
+		t.Fatalf("%v", out)
+	}
+	os.Remove("/tmp/unpackr-worker-escape") //nolint:errcheck // cleanup if the sandbox failed
 }

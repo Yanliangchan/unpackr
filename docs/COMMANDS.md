@@ -35,7 +35,7 @@ A path may appear before or after flags. A file literally named `doctor`,
 | | `--no-banner`, `--banner SEL`, `--quiet`, `--no-color` | works | Presentation |
 | `-d` | `--deep` | **not implemented** | Exit 4 |
 | `-u` | `--unpack` | works for UPX | Unpacks UPX-packed files with `upx -d` in a sandbox, validates, analyses and compares the result. Needs `upx` installed. Output goes to `<output-dir>/artifacts/` (default `./unpackr-out/artifacts/`) as `<sha256>.bin`, mode 0600. Other packers report `not-applicable` |
-| `-x` | `--extract` | **not implemented** | Exit 4 |
+| `-x` | `--extract` | works for PyInstaller | Extracts the bundle into `<output-dir>/artifacts/pyinstaller-<sha256 prefix>/` (default `./unpackr-out/`). Other files report `not-applicable` |
 | `-r` | `--reverse` | **not implemented** | Exit 4 |
 | `-c` | `--compare` | works | Exactly two files; shows header, section, import, export, entropy, packing, fingerprint, capability, indicator and string differences. `--format json` / `-o x.json` give the structured comparison |
 | | `--format html\|markdown\|csv` | **not implemented** | Exit 4 |
@@ -95,3 +95,19 @@ banner: random
   200x, a decompression-bomb guard), `max_unpack_depth` (default 3).
 - A failed or rejected unpack leaves no file behind and does not affect the rest
   of the report.
+
+## Extraction policy
+
+- Only PyInstaller bundles are extracted. UNPACKR does not extract arbitrary
+  archives, resources or installers yet.
+- The reader runs in a sandboxed worker whose only writable location is one
+  private directory. The parent then re-verifies every file before storing it.
+- Entry names containing `..` or absolute paths are skipped with a reason, not
+  rewritten. Other characters in names are replaced by `_` in file names (the
+  original name is kept in the report).
+- Limits: `extract_max_mb` (default 1024, total), `extract_max_entries`
+  (default 20000); per-entry size 256 MiB and expansion ratio 1000x are fixed.
+- Extracted files are mode 0600 and are never executed or loaded.
+- Python bytecode is saved with a `.pyc` header for the bundle's Python version
+  (3.6 to 3.13). Decompiling it needs an external tool, which UNPACKR does not
+  run yet.

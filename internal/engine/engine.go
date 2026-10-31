@@ -32,6 +32,8 @@ type Options struct {
 	Exe string
 	// Modules restricts the run to the named modules; empty means all.
 	Modules []string
+	// Extract asks for embedded content to be extracted (PyInstaller).
+	Extract bool
 	// Unpack asks for supported unpackers to be tried (UPX).
 	Unpack bool
 	// ArtifactDir receives unpacked files under artifacts/ (default ./unpackr-out).
@@ -134,6 +136,9 @@ func Analyze(ctx context.Context, path string, o Options) (*models.Report, error
 		family := id.Candidates[0].Family
 		if wants(o.Modules, "structure") {
 			runStructure(ctx, f, st.Size(), rep, family, wo)
+		}
+		if o.Extract && (family == "pe" || family == "elf" || family == "macho") {
+			runExtract(ctx, f, st.Size(), rep, o)
 		}
 		if wants(o.Modules, "analysis") && (family == "pe" || family == "elf" || family == "macho") {
 			runAnalysis(ctx, f, st.Size(), rep, family, wo, o)
