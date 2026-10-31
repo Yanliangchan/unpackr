@@ -5,6 +5,7 @@
 package pe
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"strings"
@@ -70,6 +71,7 @@ func Parse(data []byte) (b *models.Binary, err error) {
 		b.Attributes["dll_characteristics"] = strings.Join(oh.DllCharacteristics.String(), ",")
 		b.Attributes["linker_version"] = fmt.Sprintf("%d.%d", oh.MajorLinkerVersion, oh.MinorLinkerVersion)
 		b.Attributes["checksum"] = fmt.Sprintf("0x%x", oh.CheckSum)
+		layoutAttrs(b, oh.FileAlignment, oh.SectionAlignment, oh.SizeOfImage, oh.SizeOfHeaders)
 	case sw.ImageOptionalHeader32:
 		b.Format, b.Bits, b.ImageBase = "PE32", 32, uint64(oh.ImageBase)
 		epRVA, sizeOfHeaders = oh.AddressOfEntryPoint, oh.SizeOfHeaders
@@ -77,6 +79,7 @@ func Parse(data []byte) (b *models.Binary, err error) {
 		b.Attributes["dll_characteristics"] = strings.Join(oh.DllCharacteristics.String(), ",")
 		b.Attributes["linker_version"] = fmt.Sprintf("%d.%d", oh.MajorLinkerVersion, oh.MinorLinkerVersion)
 		b.Attributes["checksum"] = fmt.Sprintf("0x%x", oh.CheckSum)
+		layoutAttrs(b, oh.FileAlignment, oh.SectionAlignment, oh.SizeOfImage, oh.SizeOfHeaders)
 	default:
 		return nil, fmt.Errorf("%w: unexpected optional header type %T", ErrNotPE, oh)
 	}
@@ -98,6 +101,8 @@ func Parse(data []byte) (b *models.Binary, err error) {
 	b.Attributes["has_clr_header"] = fmt.Sprint(p.HasCLR)
 	b.Attributes["has_certificate_table"] = fmt.Sprint(p.IsSigned)
 	b.Attributes["signature_validated"] = "false" // validation is not performed by this build
+	b.Attributes["tls_callbacks"] = fmt.Sprint(tlsCallbacks(p.TLS.Callbacks))
+	b.Attributes["dos_stub_message"] = fmt.Sprint(bytes.Contains(data[:min(len(data), 0x400)], []byte("This program")))
 	b.Attributes["rich_header"] = fmt.Sprint(len(p.RichHeader.CompIDs) > 0)
 
 	// Sections.
@@ -231,4 +236,23 @@ func archName(m uint16, fallback string) string {
 		return n
 	}
 	return fallback
+}
+
+func layoutAttrs(b *models.Binary, fileAlign, secAlign, sizeOfImage, sizeOfHeaders uint32) {
+	b.Attributes["file_alignment"] = fmt.Sprint(fileAlign)
+	b.Attributes["section_alignment"] = fmt.Sprint(secAlign)
+	b.Attributes["size_of_image"] = fmt.Sprint(sizeOfImage)
+	b.Attributes["size_of_headers"] = fmt.Sprint(sizeOfHeaders)
+}
+
+// tlsCallbacks counts TLS callback entries. Callbacks run before the entry
+// point, which is why they are worth reporting.
+func tlsCallbacks(v interface{}) int {
+	switch c := v.(type) {
+	case []uint32:
+		return len(c)
+	case []uint64:
+		return len(c)
+	}
+	return 0
 }

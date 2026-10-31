@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/Yanliangchan/unpackr/internal/analysis"
+	"github.com/Yanliangchan/unpackr/internal/anomalies"
+	"github.com/Yanliangchan/unpackr/internal/capabilities"
 	"github.com/Yanliangchan/unpackr/internal/confidence"
 	"github.com/Yanliangchan/unpackr/internal/content"
 	"github.com/Yanliangchan/unpackr/internal/fingerprint"
@@ -97,13 +99,17 @@ func RunAnalysis(data []byte, family string, bin *models.Binary) *models.Analysi
 			}
 		}
 	}
+	caps := capabilities.Detect(in, pk.State)
+	anoms := anomalies.Detect(in)
 	out := &models.Analysis{
-		Entropy:     ent,
-		Strings:     scan.Summarize(sectionOf),
-		Indicators:  content.ExtractIndicators(scan.Hits, sectionOf),
-		Fingerprint: fp,
-		Packing:     pk,
-		Evidence:    sink.Evidence,
+		Capabilities: caps,
+		Anomalies:    anoms,
+		Entropy:      ent,
+		Strings:      scan.Summarize(sectionOf),
+		Indicators:   content.ExtractIndicators(scan.Hits, sectionOf),
+		Fingerprint:  fp,
+		Packing:      pk,
+		Evidence:     sink.Evidence,
 	}
 	return out
 }
@@ -134,7 +140,7 @@ func runAnalysis(ctx context.Context, f *os.File, size int64, rep *models.Report
 	rep.Analysis = &a
 	rep.Evidence = append(rep.Evidence, a.Evidence...)
 	addAnalysisFindings(rep, &a)
-	rep.NotRun = withoutStages(rep.NotRun, "entropy-analysis", "string-extraction", "indicator-extraction", "language-and-compiler-identification", "packing-assessment")
+	rep.NotRun = withoutStages(rep.NotRun, "entropy-analysis", "string-extraction", "indicator-extraction", "language-and-compiler-identification", "packing-assessment", "capability-inference", "anomaly-detection")
 }
 
 func withoutStages(all []string, drop ...string) []string {
@@ -214,6 +220,37 @@ func addAnalysisFindings(rep *models.Report, a *models.Analysis) {
 		EvidenceID: evIDs(p.Signals), Action: action,
 	})
 
+	used := map[string]int{}
+	uniq := func(id string) string {
+		used[id]++
+		if used[id] > 1 {
+			return fmt.Sprintf("%s#%d", id, used[id])
+		}
+		return id
+	}
+	for _, c := range a.Capabilities {
+		ev := evIDs(c.Signals)
+		action := ""
+		if c.Severity == models.SeverityHigh || c.Severity == models.SeverityMedium {
+			action = "Check the call sites and surrounding code (disassembly) before drawing conclusions; the import table alone cannot show how or whether the API is used."
+		}
+		rep.Findings = append(rep.Findings, models.Finding{
+			ID: uniq("cap." + c.ID), Rule: "capability/" + c.ID, Class: models.ClassInference,
+			Category: "capability", Title: "Possible capability: " + c.Name,
+			Summary: c.Summary, Severity: c.Severity, Confidence: c.Confidence, Rationale: c.Rationale,
+			EvidenceID: ev, Action: action, Attack: c.Attack,
+		})
+	}
+	for _, an := range a.Anomalies {
+		rep.Findings = append(rep.Findings, models.Finding{
+			ID: uniq("anomaly." + an.ID), Rule: "anomaly/" + an.ID, Class: models.ClassObservation,
+			Category: "anomaly", Title: an.Title,
+			Summary: an.Why + benignSuffix(an.Benign), Severity: an.Severity, Confidence: models.ConfidenceHigh,
+			Rationale:  "the condition is read directly from the file's structure; its meaning is the analyst's call",
+			EvidenceID: an.Evidence,
+		})
+	}
+
 	if len(a.Indicators) > 0 {
 		counts := map[string]int{}
 		for _, i := range a.Indicators {
@@ -277,4 +314,11 @@ func joinSpace(s []string) string {
 		out += x + "."
 	}
 	return out
+}
+
+func benignSuffix(b string) string {
+	if b == "" {
+		return ""
+	}
+	return " Common and harmless in: " + b
 }

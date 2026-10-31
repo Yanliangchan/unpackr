@@ -96,12 +96,55 @@ type PackingAssessment struct {
 	Notes      []string   `json:"notes,omitempty"`
 }
 
+// Capability is a possible behaviour suggested by what a file references. It
+// is inference from static evidence: an imported API shows that code may be
+// able to ask for something, never that it ran or succeeded.
+type Capability struct {
+	ID         string      `json:"id"`
+	Name       string      `json:"name"`
+	Category   string      `json:"category"`
+	Attack     []string    `json:"attack,omitempty"`
+	Confidence Confidence  `json:"confidence"`
+	Rationale  string      `json:"confidence_rationale"`
+	Severity   Severity    `json:"severity"`
+	Summary    string      `json:"summary"`
+	Chain      []ChainStep `json:"chain"`
+	// EvidenceKinds says how the capability is supported: imported (named in
+	// the import table), string-referenced (name present as a string, e.g.
+	// resolved at run time) or structural. "Observed at run time" does not
+	// exist because samples are never executed.
+	EvidenceKinds []string `json:"evidence_kinds"`
+	Signals       []Signal `json:"signals"`
+	Caveat        string   `json:"caveat,omitempty"`
+}
+
+// ChainStep is one stage of an API relationship (for example allocate,
+// write, execute) with the names that matched.
+type ChainStep struct {
+	Label  string   `json:"label"`
+	APIs   []string `json:"apis"`
+	Source string   `json:"source"` // imported | string-referenced
+}
+
+// Anomaly is a structural oddity with an explanation of why it is notable and
+// where it is common and harmless.
+type Anomaly struct {
+	ID       string   `json:"id"`
+	Title    string   `json:"title"`
+	Why      string   `json:"why_notable"`
+	Benign   string   `json:"benign_causes,omitempty"`
+	Severity Severity `json:"severity"`
+	Evidence []string `json:"evidence"`
+}
+
 // Analysis is the output of the content-analysis worker.
 type Analysis struct {
-	Entropy     EntropyInfo       `json:"entropy"`
-	Strings     StringsInfo       `json:"strings"`
-	Indicators  []Indicator       `json:"indicators"`
-	Fingerprint Fingerprint       `json:"fingerprint"`
-	Packing     PackingAssessment `json:"packing"`
-	Evidence    []Evidence        `json:"evidence"`
+	Entropy      EntropyInfo       `json:"entropy"`
+	Strings      StringsInfo       `json:"strings"`
+	Indicators   []Indicator       `json:"indicators"`
+	Fingerprint  Fingerprint       `json:"fingerprint"`
+	Packing      PackingAssessment `json:"packing"`
+	Capabilities []Capability      `json:"capabilities"`
+	Anomalies    []Anomaly         `json:"anomalies"`
+	Evidence     []Evidence        `json:"evidence"`
 }

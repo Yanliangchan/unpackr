@@ -86,6 +86,8 @@ type Finding struct {
 	EvidenceID []string   `json:"evidence"`
 	Action     string     `json:"recommended_action,omitempty"`
 	Dissent    []string   `json:"dissent,omitempty"`
+	// Attack lists MITRE ATT&CK technique ids the finding is consistent with.
+	Attack []string `json:"attack,omitempty"`
 }
 
 // Hashes of the whole file.
