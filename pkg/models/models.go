@@ -175,6 +175,8 @@ type Report struct {
 	Identification *Identification `json:"identification,omitempty"`
 	Binary         *Binary         `json:"binary,omitempty"`
 	Analysis       *Analysis       `json:"analysis,omitempty"`
+	Unpack         *UnpackAttempt  `json:"unpack,omitempty"`
+	Artifacts      []Artifact      `json:"artifacts,omitempty"`
 	Findings       []Finding       `json:"findings"`
 	Evidence       []Evidence      `json:"evidence"`
 	Warnings       []Warning       `json:"warnings"`

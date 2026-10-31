@@ -14,6 +14,17 @@ type SandboxOptions struct {
 	// an inherited file descriptor.
 	WritableDirs []string
 	ReadableDirs []string
+
+	// AllowExec lets the process call execve once, to start an external
+	// tool. Landlock then limits what may be executed to ExecFiles, so the
+	// tool cannot start anything else. Used only by the exec worker.
+	AllowExec bool
+	// ExecFiles may be read and executed (the tool and its dynamic loader).
+	ExecFiles []string
+	// ReadOnlyNoExec may be read but never executed (shared libraries).
+	ReadOnlyNoExec []string
+	// ReadFiles may be read (single files, such as the loader cache).
+	ReadFiles []string
 }
 
 // Level names the overall result.

@@ -75,6 +75,9 @@ func renderReport(w io.Writer, r *models.Report, verbose bool, st terminal.Style
 	if r.Analysis != nil {
 		renderAnalysis(w, r, verbose, st)
 	}
+	if r.Unpack != nil {
+		renderUnpack(w, r, verbose, st)
+	}
 
 	if len(r.Warnings) > 0 {
 		h("Warnings")
@@ -435,5 +438,111 @@ func renderAnomalies(w io.Writer, a *models.Analysis, verbose bool, st terminal.
 		if verbose && an.Benign != "" {
 			fmt.Fprintf(w, "        common and harmless in: %s\n", safe(an.Benign))
 		}
+	}
+}
+
+func renderUnpack(w io.Writer, r *models.Report, verbose bool, st terminal.Style) {
+	u := r.Unpack
+	fmt.Fprintf(w, "\n%s\n", st.Bold(st.Cyan("Unpacking")))
+	status := u.Status
+	switch u.Status {
+	case "unpacked":
+		status = st.Green(status)
+	case "failed", "rejected":
+		status = st.Red(status)
+	default:
+		status = st.Yellow(status)
+	}
+	fmt.Fprintf(w, "  %-10s %s\n", "Status", status)
+	fmt.Fprintf(w, "  %-10s %s\n", "", safe(u.Message))
+	if u.Tool != "" {
+		tv := u.Tool
+		if u.ToolVersion != "" {
+			tv += " " + u.ToolVersion
+		}
+		fmt.Fprintf(w, "  %-10s %s\n", "Tool", safe(tv))
+	}
+	fmt.Fprintf(w, "  %-10s %s\n", "Supported", st.Dim(strings.Join(u.Supported, ", ")+" (no other packer is unpacked; this is not a generic unpacker)"))
+	for _, a := range r.Artifacts {
+		fmt.Fprintf(w, "\n  %s\n", st.Bold("Unpacked layer"))
+		fmt.Fprintf(w, "  %-10s %s\n", "File", safe(a.Path))
+		fmt.Fprintf(w, "  %-10s %d bytes, mode 0600, never executed\n", "Size", a.Size)
+		fmt.Fprintf(w, "  %-10s %s\n", "SHA256", a.Hashes.SHA256)
+		for _, c := range a.Validation {
+			mark := st.Green("✓")
+			if !c.Passed {
+				mark = st.Red("✗")
+			}
+			d := ""
+			if c.Detail != "" {
+				d = st.Dim("  " + safe(c.Detail))
+			}
+			if verbose || !c.Passed {
+				fmt.Fprintf(w, "  %s %s%s\n", mark, safe(c.Name), d)
+			}
+		}
+		if !verbose {
+			fmt.Fprintf(w, "  %s\n", st.Dim(fmt.Sprintf("%d validation checks passed (-v lists them)", len(a.Validation))))
+		}
+		if a.Comparison != nil {
+			renderComparison(w, a.Comparison, verbose, st, "packed", "unpacked")
+		}
+		if a.Report != nil {
+			fmt.Fprintf(w, "\n%s\n", st.Bold(st.Cyan("Analysis of the unpacked layer")))
+			renderReport(w, a.Report, verbose, st)
+		}
+	}
+}
+
+func renderComparison(w io.Writer, c *models.Comparison, verbose bool, st terminal.Style, nameA, nameB string) {
+	fmt.Fprintf(w, "\n  %s\n", st.Bold(fmt.Sprintf("Differences (%s -> %s)", nameA, nameB)))
+	any := false
+	line := func(label string, ch []models.Change) {
+		for _, x := range ch {
+			any = true
+			fmt.Fprintf(w, "    %-26s %s  ->  %s\n", strings.TrimSpace(label+" "+safe(x.Field)), safe(x.A), safe(x.B))
+		}
+	}
+	line("", c.Header)
+	for _, sd := range c.SectionChanges {
+		for _, x := range sd.Changes {
+			any = true
+			fmt.Fprintf(w, "    section %-14s %s: %s  ->  %s\n", safe(sd.Name), safe(x.Field), safe(x.A), safe(x.B))
+		}
+	}
+	set := func(label string, d models.SetDiff, limit int) {
+		show := func(side string, items []string) {
+			if len(items) == 0 {
+				return
+			}
+			any = true
+			n := len(items)
+			if !verbose && n > limit {
+				items = items[:limit]
+			}
+			fmt.Fprintf(w, "    %-22s %s %d: %s", label, side, n, safe(strings.Join(items, ", ")))
+			if n > len(items) {
+				fmt.Fprintf(w, " … (+%d, use -v)", n-len(items))
+			}
+			fmt.Fprintln(w)
+		}
+		show("only in "+nameA, d.OnlyA)
+		show("only in "+nameB, d.OnlyB)
+	}
+	set("sections", c.Sections, 12)
+	set("libraries", c.Libraries, 12)
+	set("imported functions", c.Imports, 8)
+	set("exports", c.Exports, 8)
+	set("capabilities", c.Capabilities, 12)
+	set("indicators", c.Indicators, 6)
+	line("entropy", c.Entropy)
+	line("", c.Packing)
+	line("fingerprint", c.Fingerprint)
+	line("", c.Strings)
+	for _, n := range c.Notes {
+		fmt.Fprintf(w, "    %s\n", st.Dim(safe(n)))
+	}
+	if !any {
+		fmt.Fprintf(w, "    %s\n", st.Dim("no differences found in the compared properties"))
 	}
 }

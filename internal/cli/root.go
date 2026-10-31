@@ -15,6 +15,7 @@ import (
 
 	"github.com/Yanliangchan/unpackr/assets"
 	"github.com/Yanliangchan/unpackr/internal/artvault"
+	"github.com/Yanliangchan/unpackr/internal/comparison"
 	"github.com/Yanliangchan/unpackr/internal/config"
 	"github.com/Yanliangchan/unpackr/internal/engine"
 	"github.com/Yanliangchan/unpackr/internal/terminal"
@@ -133,10 +134,10 @@ Run 'unpackr doctor' to check the sandbox and optional tools.`,
 	f.BoolVarP(&fl.Quick, "quick", "q", false, "fast triage; accepts directories")
 	f.BoolVarP(&fl.Deep, "deep", "d", false, "extended analysis (not implemented in this build)")
 	f.BoolVarP(&fl.Verbose, "verbose", "v", false, "show technical evidence")
-	f.BoolVarP(&fl.Unpack, "unpack", "u", false, "attempt supported unpacking (not implemented in this build)")
+	f.BoolVarP(&fl.Unpack, "unpack", "u", false, "unpack supported packers (UPX) and analyse the result; needs upx installed")
 	f.BoolVarP(&fl.Extract, "extract", "x", false, "extract embedded content (not implemented in this build)")
 	f.BoolVarP(&fl.Reverse, "reverse", "r", false, "use reverse-engineering integrations (not implemented in this build)")
-	f.BoolVarP(&fl.Compare, "compare", "c", false, "compare two files (not implemented in this build)")
+	f.BoolVarP(&fl.Compare, "compare", "c", false, "compare two files: header, sections, imports, entropy, packing, capabilities, indicators")
 	f.StringVarP(&fl.Output, "output", "o", "", "write a report; format inferred from the extension (.json)")
 	f.StringVar(&fl.Format, "format", "", "output format: terminal, json (html, markdown, csv are not implemented yet)")
 	f.StringVar(&fl.OutputDir, "output-dir", "", "directory for per-file JSON reports in batch mode")
@@ -162,6 +163,9 @@ func (g *globals) run(cmd *cobra.Command, args []string) error {
 	machine := plan.Format == "json" && plan.OutputFile == ""
 	g.maybeBanner(cmd, cfg, machine)
 
+	if plan.Mode == ModeCompare {
+		return g.runCompare(cmd, plan, cfg, machine)
+	}
 	files, err := collectInputs(plan.Paths, cfg.MaxBatchFiles)
 	if err != nil {
 		return err
@@ -173,7 +177,7 @@ func (g *globals) run(cmd *cobra.Command, args []string) error {
 	if plan.Mode == ModeQuick {
 		profile = engine.ProfileQuick
 	}
-	opts := engine.Options{Config: cfg, Profile: profile, Modules: plan.Modules}
+	opts := engine.Options{Config: cfg, Profile: profile, Modules: plan.Modules, Unpack: plan.Unpack, ArtifactDir: plan.OutputDir}
 
 	ctx, stop := signalContext()
 	defer stop()
@@ -293,4 +297,56 @@ func writePerFile(dir string, reps []*models.Report) error {
 
 func signalContext() (context.Context, context.CancelFunc) {
 	return signalNotify()
+}
+
+// CompareReport is the JSON shape of -c.
+type CompareReport struct {
+	SchemaVersion string             `json:"schema_version"`
+	Tool          models.ToolMeta    `json:"tool"`
+	First         *models.Report     `json:"first"`
+	Second        *models.Report     `json:"second"`
+	Comparison    *models.Comparison `json:"comparison"`
+}
+
+func (g *globals) runCompare(cmd *cobra.Command, plan Plan, cfg config.Config, machine bool) error {
+	for _, p := range plan.Paths {
+		if isDir(p) {
+			return usagef("-c/--compare compares two files, but %s is a directory", p)
+		}
+	}
+	ctx, stop := signalContext()
+	defer stop()
+	opts := engine.Options{Config: cfg, Profile: engine.ProfileInfo, Modules: plan.Modules}
+	reps, errs := analyzeAll(ctx, plan.Paths, opts, 2)
+	if len(errs) > 0 || len(reps) != 2 {
+		for p, e := range errs {
+			fmt.Fprintf(os.Stderr, "error: %s: %v\n", terminal.Sanitize(p), e)
+		}
+		return fmt.Errorf("both files must be analysable to compare them")
+	}
+	first, second := reps[0], reps[1] // results keep argument order
+	cmp := comparison.Diff(first, second)
+	payload := CompareReport{SchemaVersion: models.SchemaVersion, First: first, Second: second, Comparison: cmp,
+		Tool: models.ToolMeta{Name: "unpackr", Version: version.Version, Platform: version.Platform(), Offline: true}}
+	if plan.OutputFile != "" {
+		if err := writeJSON(plan.OutputFile, payload); err != nil {
+			return err
+		}
+	}
+	out := cmd.OutOrStdout()
+	if machine {
+		return encode(out, payload)
+	}
+	st := terminal.Style{On: terminal.ColorEnabled(os.Stdout, g.noColor)}
+	fmt.Fprintf(out, "%s\n", st.Bold(st.Cyan("Comparison")))
+	fmt.Fprintf(out, "  %-10s %s  %s\n", "First", safe(first.File.Name), first.File.Hashes.SHA256)
+	fmt.Fprintf(out, "  %-10s %s  %s\n", "Second", safe(second.File.Name), second.File.Hashes.SHA256)
+	if cmp.Identical {
+		fmt.Fprintf(out, "  %s\n", st.Green("the files are byte-for-byte identical (same SHA-256)"))
+	}
+	renderComparison(out, cmp, plan.Verbose, st, "first", "second")
+	if plan.OutputFile != "" && !g.quiet {
+		fmt.Fprintf(os.Stderr, "report written to %s\n", plan.OutputFile)
+	}
+	return nil
 }
