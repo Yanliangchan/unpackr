@@ -83,3 +83,9 @@ func TestUnpackingAndComparisonAreIndependentOfPresentation(t *testing.T) {
 		mustNotImport(t, p, "internal/terminal", "internal/cli", "internal/artvault")
 	}
 }
+
+// Reports are built from the data model only: no terminal code, no artwork,
+// no analysis engine.
+func TestReportingOnlyDependsOnTheModel(t *testing.T) {
+	mustNotImport(t, "internal/reporting", "internal/terminal", "internal/cli", "internal/artvault", "internal/engine", "internal/worker", "assets")
+}

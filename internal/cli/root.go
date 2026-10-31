@@ -18,6 +18,7 @@ import (
 	"github.com/Yanliangchan/unpackr/internal/comparison"
 	"github.com/Yanliangchan/unpackr/internal/config"
 	"github.com/Yanliangchan/unpackr/internal/engine"
+	"github.com/Yanliangchan/unpackr/internal/reporting"
 	"github.com/Yanliangchan/unpackr/internal/terminal"
 	"github.com/Yanliangchan/unpackr/internal/version"
 	"github.com/Yanliangchan/unpackr/pkg/models"
@@ -146,8 +147,8 @@ Run 'unpackr doctor' to check the sandbox and optional tools.`,
 	f.BoolVarP(&fl.Extract, "extract", "x", false, "extract embedded content (PyInstaller bundles) without running it")
 	f.BoolVarP(&fl.Reverse, "reverse", "r", false, "use reverse-engineering integrations (not implemented in this build)")
 	f.BoolVarP(&fl.Compare, "compare", "c", false, "compare two files: header, sections, imports, entropy, packing, capabilities, indicators")
-	f.StringVarP(&fl.Output, "output", "o", "", "write a report; format inferred from the extension (.json)")
-	f.StringVar(&fl.Format, "format", "", "output format: terminal, json (html, markdown, csv are not implemented yet)")
+	f.StringVarP(&fl.Output, "output", "o", "", "write a report; format inferred from the extension (.json .html .md .csv)")
+	f.StringVar(&fl.Format, "format", "", "output format: terminal, json, html, markdown, csv (csv is the indicator list, or the summary table for several files)")
 	f.StringVar(&fl.OutputDir, "output-dir", "", "directory for per-file JSON reports in batch mode")
 	f.StringVar(&fl.Modules, "modules", "", "comma-separated modules to run (available: identification, structure)")
 	f.IntVar(&g.threads, "threads", 0, "concurrent analyses for batches (default from config)")
@@ -168,7 +169,7 @@ func (g *globals) run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	machine := plan.Format == "json" && plan.OutputFile == ""
+	machine := plan.Format != "terminal" && plan.OutputFile == ""
 	g.maybeBanner(cmd, cfg, machine)
 
 	if plan.Mode == ModeCompare {
@@ -207,15 +208,24 @@ func (g *globals) run(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
+	render := func(w io.Writer, format string) error {
+		if format == "json" {
+			return encode(w, reportPayload(reps, errs, single))
+		}
+		if single && len(reps) == 1 {
+			return reporting.Single(w, format, reps[0])
+		}
+		return reporting.Batch(w, format, reps, errStrings(errs))
+	}
 	if plan.OutputFile != "" {
-		if err := writeJSON(plan.OutputFile, reportPayload(reps, errs, single)); err != nil {
+		if err := writeFile(plan.OutputFile, func(w io.Writer) error { return render(w, plan.OutputFmt) }); err != nil {
 			return err
 		}
 	}
 
 	switch {
 	case machine:
-		if err := encode(out, reportPayload(reps, errs, single)); err != nil {
+		if err := render(out, plan.Format); err != nil {
 			return err
 		}
 	case single && len(reps) == 1:
@@ -279,15 +289,30 @@ func encode(w io.Writer, v any) error {
 }
 
 func writeJSON(path string, v any) error {
+	return writeFile(path, func(w io.Writer) error { return encode(w, v) })
+}
+
+// writeFile creates path (BuildPlan has already refused an input path) and
+// fills it with fn. A failure removes the partial file.
+func writeFile(path string, fn func(io.Writer) error) error {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}
-	if err := encode(f, v); err != nil {
+	if err := fn(f); err != nil {
 		_ = f.Close()
+		_ = os.Remove(path)
 		return err
 	}
 	return f.Close()
+}
+
+func errStrings(errs map[string]error) map[string]string {
+	m := make(map[string]string, len(errs))
+	for k, v := range errs {
+		m[k] = v.Error()
+	}
+	return m
 }
 
 func writePerFile(dir string, reps []*models.Report) error {
@@ -336,14 +361,20 @@ func (g *globals) runCompare(cmd *cobra.Command, plan Plan, cfg config.Config, m
 	cmp := comparison.Diff(first, second)
 	payload := CompareReport{SchemaVersion: models.SchemaVersion, First: first, Second: second, Comparison: cmp,
 		Tool: models.ToolMeta{Name: "unpackr", Version: version.Version, Platform: version.Platform(), Offline: true}}
+	renderCmp := func(w io.Writer, format string) error {
+		if format == "json" {
+			return encode(w, payload)
+		}
+		return reporting.Compare(w, format, first, second, cmp)
+	}
 	if plan.OutputFile != "" {
-		if err := writeJSON(plan.OutputFile, payload); err != nil {
+		if err := writeFile(plan.OutputFile, func(w io.Writer) error { return renderCmp(w, plan.OutputFmt) }); err != nil {
 			return err
 		}
 	}
 	out := cmd.OutOrStdout()
 	if machine {
-		return encode(out, payload)
+		return renderCmp(out, plan.Format)
 	}
 	st := terminal.Style{On: terminal.ColorEnabled(os.Stdout, g.noColor)}
 	fmt.Fprintf(out, "%s\n", st.Bold(st.Cyan("Comparison")))

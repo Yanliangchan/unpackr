@@ -210,9 +210,6 @@ func TestUnimplementedFeaturesAreRefusedNotFaked(t *testing.T) {
 			t.Errorf("%s: code %d stdout %q", flag, r.code, r.stdout)
 		}
 	}
-	if r := run(t, "-i", p, "-o", filepath.Join(t.TempDir(), "r.html")); r.code != 4 {
-		t.Errorf("html: code %d", r.code)
-	}
 }
 
 func TestUsageErrors(t *testing.T) {
@@ -466,5 +463,70 @@ func TestExtractThroughTheCLI(t *testing.T) {
 	}
 	if r := run(t, "-x", "-i", fixtures.GoBinary(t, "linux", "amd64"), "--no-banner"); r.code != 0 || !strings.Contains(r.stdout, "not-applicable") {
 		t.Fatalf("%d %s", r.code, r.stdout)
+	}
+}
+
+func TestReportFormatsThroughTheCLI(t *testing.T) {
+	data := samplePE()
+	data = append(data, []byte("beacon http://203.0.113.9/gate.php and C:\\Users\\Public\\x.exe")...)
+	d := t.TempDir()
+	p := write(t, d, "s.exe", data, 0o600)
+	for _, tc := range []struct{ file, want string }{
+		{"report.html", "<!doctype html>"}, {"report.md", "# UNPACKR report"}, {"report.csv", "file_sha256,file_name,type,value"}, {"report.json", `"schema_version"`},
+	} {
+		out := filepath.Join(d, tc.file)
+		r := run(t, "-i", p, "-o", out)
+		if r.code != 0 {
+			t.Fatalf("%s: %d %s", tc.file, r.code, r.stderr)
+		}
+		b, err := os.ReadFile(out)
+		if err != nil || !strings.Contains(string(b), tc.want) {
+			t.Fatalf("%s: %v %.200s", tc.file, err, b)
+		}
+		if strings.ContainsRune(string(b), 0x1b) || strings.Contains(string(b), "ArtVault") {
+			t.Errorf("%s contains terminal artwork or escape codes", tc.file)
+		}
+		if tc.file != "report.csv" && tc.file != "report.json" && strings.Contains(string(b), "203.0.113.9") {
+			t.Errorf("%s contains an un-defanged indicator", tc.file)
+		}
+	}
+	// stdout formats are pure: no banner, no progress, nothing before the document.
+	r := run(t, "-i", p, "--format", "html")
+	if !strings.HasPrefix(r.stdout, "<!doctype html>") || r.stderr != "" {
+		t.Fatalf("html on stdout not pure: %.80q / %q", r.stdout, r.stderr)
+	}
+	if r := run(t, "-i", p, "--format", "markdown"); !strings.HasPrefix(r.stdout, "# UNPACKR report") {
+		t.Fatalf("%.80q", r.stdout)
+	}
+	// The report is never written over the input, whatever the extension.
+	if r := run(t, "-i", p, "-o", p); r.code != 2 {
+		t.Fatalf("overwrite of the input allowed: %d", r.code)
+	}
+}
+
+func TestBatchAndCompareReports(t *testing.T) {
+	d := t.TempDir()
+	write(t, d, "a.exe", samplePE(), 0o600)
+	b := samplePE()
+	b[0x200] = 7
+	write(t, d, "b.exe", b, 0o600)
+	out := filepath.Join(t.TempDir(), "batch.html")
+	if r := run(t, "-q", d, "-o", out); r.code != 0 {
+		t.Fatalf("%d %s", r.code, r.stderr)
+	}
+	h, _ := os.ReadFile(out)
+	if !strings.Contains(string(h), "UNPACKR batch report") || !strings.Contains(string(h), "a.exe") || !strings.Contains(string(h), "b.exe") {
+		t.Fatalf("%.300s", h)
+	}
+	cmp := filepath.Join(t.TempDir(), "cmp.html")
+	if r := run(t, "-c", filepath.Join(d, "a.exe"), filepath.Join(d, "b.exe"), "-o", cmp); r.code != 0 {
+		t.Fatalf("%d %s", r.code, r.stderr)
+	}
+	if h, _ := os.ReadFile(cmp); !strings.Contains(string(h), "UNPACKR comparison") {
+		t.Fatalf("%.200s", h)
+	}
+	r := run(t, "-q", d, "--format", "csv")
+	if !strings.HasPrefix(r.stdout, "name,sha256,format") {
+		t.Fatalf("%.100s", r.stdout)
 	}
 }

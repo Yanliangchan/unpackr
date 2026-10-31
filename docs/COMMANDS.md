@@ -23,8 +23,8 @@ A path may appear before or after flags. A file literally named `doctor`,
 | `-i` | `--info` | works | Identification, hashes, executable structure. The default when only a path is given |
 | `-q` | `--quick` | works | Same stages as `-i` today; accepts directories and prints a table |
 | `-v` | `--verbose` | works | Show check-level evidence with file offsets, header attributes, every imported/exported symbol, module timings, sandbox detail |
-| `-o` | `--output FILE` | works for `.json` | Write a report; format inferred from the extension |
-| | `--format` | `terminal`, `json` | `json` writes only JSON to stdout |
+| `-o` | `--output FILE` | works | Write a report; format inferred from `.json`, `.html`, `.md`, `.csv` |
+| | `--format` | `terminal`, `json`, `html`, `markdown`, `csv` | Non-terminal formats write only the document to stdout (no banner or progress). `csv` is the indicator list for one file and the summary table for several |
 | | `--output-dir DIR` | works | Batch: one `<sha256>.json` per sample |
 | | `--modules` | `identification`, `structure`, `analysis` | Run only the named modules (identification always runs). `analysis` covers entropy, strings, indicators, fingerprint and packing |
 | | `--threads N` | works | Concurrent analyses in batch mode |
@@ -38,7 +38,6 @@ A path may appear before or after flags. A file literally named `doctor`,
 | `-x` | `--extract` | works for PyInstaller | Extracts the bundle into `<output-dir>/artifacts/pyinstaller-<sha256 prefix>/` (default `./unpackr-out/`). Other files report `not-applicable` |
 | `-r` | `--reverse` | **not implemented** | Exit 4 |
 | `-c` | `--compare` | works | Exactly two files; shows header, section, import, export, entropy, packing, fingerprint, capability, indicator and string differences. `--format json` / `-o x.json` give the structured comparison |
-| | `--format html\|markdown\|csv` | **not implemented** | Exit 4 |
 | `-h` | `--help` | works | |
 
 ## Combination rules
@@ -111,3 +110,17 @@ banner: random
 - Python bytecode is saved with a `.pyc` header for the bundle's Python version
   (3.6 to 3.13). Decompiling it needs an external tool, which UNPACKR does not
   run yet.
+
+## Report formats
+
+| Format | Content |
+|---|---|
+| `json` | The complete structured report (`schema_version`); raw values |
+| `html` | Self-contained page: summary, file and hashes, fingerprint, packing, structure, capabilities, anomalies, indicators, payloads, findings, evidence, recommendations, limits. No script or external resource |
+| `markdown` | The same sections as GitHub-flavoured Markdown |
+| `csv` | One file: the indicator list (raw value, defanged value, offset, section). Several files: a summary table |
+
+HTML, Markdown and terminal output defang network indicators and sanitise every
+string taken from the sample. JSON and the CSV `value` column keep raw values
+for tooling; CSV cells beginning with `=`, `+`, `-`, `@`, tab or CR are prefixed
+with an apostrophe so spreadsheets do not execute them.

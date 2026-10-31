@@ -9,13 +9,17 @@ import (
 	"github.com/Yanliangchan/unpackr/pkg/models"
 )
 
+// TLDs are the top-level domains recognised as domain indicators. A short,
+// deliberate list: every extra entry adds false positives from symbol names.
+const TLDs = "com|net|org|info|biz|io|co|ru|cn|xyz|top|cc|tk|ml|ga|cf|gq|de|uk|fr|jp|us|ly|br|eu|onion|club|site|online|shop|pw|vip|ir|kp|ua|nl|pl|es|au|ca|ch|se|kr|tw|hk|sg|vn|th|tr|za|mx|ar|tv|ws|su"
+
 // MaxIndicators bounds the indicator list.
 const MaxIndicators = 2000
 
 var (
 	reURL     = regexp.MustCompile(`(?i)\b(?:https?|ftp)://[^\s"'<>\\^|{})` + "`" + `]{3,300}`)
 	reIPv4    = regexp.MustCompile(`(?:^|[^0-9.])((?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9]))(?:$|[^0-9.]|\.(?:[^0-9]|$))`)
-	reDomain  = regexp.MustCompile(`\b((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|net|org|info|biz|io|co|ru|cn|xyz|top|cc|tk|ml|ga|cf|gq|de|uk|fr|jp|us|tv|ws|su|ly|br|eu|onion|club|site|online|shop|pw|vip|ir|kp|ua|nl|pl|es|au|ca|ch|se|kr|tw|hk|sg|vn|th|tr|za|mx|ar))\b`)
+	reDomain  = regexp.MustCompile(`\b((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:` + TLDs + `))\b`)
 	reEmail   = regexp.MustCompile(`\b[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,24}\b`)
 	reWinPath = regexp.MustCompile(`(?i)\b[a-z]:\\(?:[^\\/:*?"<>|\r\n\x00]{1,64}\\)*[^\\/:*?"<>|\r\n\x00]{1,64}`)
 	reUNC     = regexp.MustCompile(`\\\\[A-Za-z0-9_$-][A-Za-z0-9_.$-]{1,62}\\[A-Za-z0-9_.$-]{1,64}(?:\\[A-Za-z0-9_.$-]{1,64}){0,4}`)
