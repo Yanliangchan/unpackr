@@ -17,6 +17,8 @@ executables on Linux. Samples are never executed.
 - Shannon entropy per section and overlay; ASCII and UTF-16 string extraction with offsets; indicator-shaped strings (URLs, IPv4, domains, emails, Windows/Unix paths, registry keys, command lines) with false-positive filters tuned on real binaries
 - Build fingerprint: language, compiler and runtime as ranked hypotheses with the signals behind each (Go, Rust, .NET, MSVC, GCC/Clang/MinGW, Delphi, VB6, PyInstaller/Nuitka, Swift/Objective-C). C and C++ stay listed as alternatives because compiled binaries cannot reliably be told apart
 - Packing assessment (`unpacked` / `likely-packed` / `confirmed-packed` / `unknown`) from independent signals: UPX and other packer signatures, default section names, entry-point placement, empty executable sections, sparse imports, .NET protector markers. Entropy alone can never produce a packed verdict (tested)
+- Capability inference (40 rules across network, process creation, injection, persistence, credential access, collection, encryption, anti-debugging/VM, discovery) with ATT&CK mapping, API relationship chains and an explicit evidence class (`imported` / `string-referenced` / `structural`). Wording is always "references X, consistent with Y": an imported API is never presented as behaviour, and tests enforce that
+- Structural anomaly catalogue (PE, ELF, Mach-O): each entry states the fact, why it is notable and where it is common and harmless; tuned so ordinary toolchain output raises nothing above informational
 - MD5 / SHA-1 / SHA-256, with a before-and-after integrity check on the input
 - Format identification runs in a separate worker process that confines itself
   with Landlock, seccomp-bpf, `no_new_privs` and resource limits; `unpackr doctor`
@@ -27,7 +29,7 @@ executables on Linux. Samples are never executed.
   confidence with its reason, and references to evidence
 
 Every report lists the analysis stages this build does **not** perform
-(PE resources/TLS/relocations/Authenticode, Mach-O code signature, capability inference, anomaly detection), so a missing stage cannot be
+(PE resources/relocations/debug directory/Authenticode validation, Mach-O code signature, .NET metadata, disassembly-backed capability analysis), so a missing stage cannot be
 mistaken for a clean result.
 
 ## Build

@@ -326,6 +326,8 @@ func renderAnalysis(w io.Writer, r *models.Report, verbose bool, st terminal.Sty
 
 	h("Stage 04 · Static intelligence")
 	fmt.Fprintf(w, "  %-10s %d found (%d ASCII, %d UTF-16); showing %d in JSON output\n", "Strings", a.Strings.Total, a.Strings.ASCII, a.Strings.UTF16, len(a.Strings.Shown))
+	renderCapabilities(w, a, verbose, st)
+	renderAnomalies(w, a, verbose, st)
 	if len(a.Indicators) == 0 {
 		fmt.Fprintf(w, "  %-10s %s\n", "Indicators", st.Dim("none found"))
 		return
@@ -362,4 +364,76 @@ func renderAnalysis(w io.Writer, r *models.Report, verbose bool, st terminal.Sty
 		}
 	}
 	fmt.Fprintf(w, "\n  %s\n", st.Dim("Indicators are strings found in the file. They do not show that the sample uses or contacts them."))
+}
+
+func renderCapabilities(w io.Writer, a *models.Analysis, verbose bool, st terminal.Style) {
+	fmt.Fprintf(w, "\n  %s\n", st.Bold("Capabilities"))
+	fmt.Fprintf(w, "  %s\n", st.Dim("Inferred from what the file references. The sample was not run, so none of this is observed behaviour."))
+	if len(a.Capabilities) == 0 {
+		fmt.Fprintf(w, "  %s\n", st.Dim("none inferred"))
+		return
+	}
+	cat := ""
+	for _, c := range a.Capabilities {
+		if c.Category != cat {
+			cat = c.Category
+			fmt.Fprintf(w, "\n  %s\n", st.Cyan(safe(cat)))
+		}
+		atk := ""
+		if len(c.Attack) > 0 {
+			atk = "  ATT&CK " + strings.Join(c.Attack, ", ")
+		}
+		fmt.Fprintf(w, "    %s %s  %s%s\n", st.Yellow("•"), safe(c.Name), confTag(c.Confidence, st), st.Dim(atk))
+		var flow []string
+		for _, s := range c.Chain {
+			if len(s.APIs) > 0 {
+				flow = append(flow, safe(s.APIs[0]))
+			}
+		}
+		if strings.HasPrefix(c.ID, "exfil") {
+			for _, s := range c.Chain {
+				fmt.Fprintf(w, "        %s: %s\n", safe(s.Label), safe(strings.Join(s.APIs, ", ")))
+			}
+		} else if len(flow) > 1 {
+			fmt.Fprintf(w, "        %s  %s\n", strings.Join(flow, " → "), st.Dim("("+strings.Join(c.EvidenceKinds, ", ")+")"))
+		} else if len(flow) == 1 {
+			fmt.Fprintf(w, "        %s  %s\n", flow[0], st.Dim("("+strings.Join(c.EvidenceKinds, ", ")+")"))
+		}
+		if verbose {
+			fmt.Fprintf(w, "        why: %s\n", safe(c.Rationale))
+			for _, s := range c.Chain {
+				fmt.Fprintf(w, "        | %-22s %s [%s]\n", safe(s.Label), safe(strings.Join(s.APIs, ", ")), s.Source)
+			}
+			for _, sg := range c.Signals {
+				if strings.Contains(sg.ID, ".string") || strings.Contains(sg.ID, ".constant") {
+					fmt.Fprintf(w, "        · [%s] %s\n", sg.Strength, safe(sg.Detail))
+				}
+			}
+			if c.Caveat != "" {
+				fmt.Fprintf(w, "        note: %s\n", safe(c.Caveat))
+			}
+		}
+	}
+}
+
+func renderAnomalies(w io.Writer, a *models.Analysis, verbose bool, st terminal.Style) {
+	fmt.Fprintf(w, "\n  %s\n", st.Bold(fmt.Sprintf("Structural anomalies (%d)", len(a.Anomalies))))
+	if len(a.Anomalies) == 0 {
+		fmt.Fprintf(w, "  %s\n", st.Dim("none found"))
+		return
+	}
+	for _, an := range a.Anomalies {
+		mark := st.Dim("·")
+		switch an.Severity {
+		case models.SeverityHigh:
+			mark = st.Red("!")
+		case models.SeverityMedium:
+			mark = st.Yellow("!")
+		}
+		fmt.Fprintf(w, "    %s %s\n", mark, safe(an.Title))
+		fmt.Fprintf(w, "        %s\n", st.Dim(safe(an.Why)))
+		if verbose && an.Benign != "" {
+			fmt.Fprintf(w, "        common and harmless in: %s\n", safe(an.Benign))
+		}
+	}
 }

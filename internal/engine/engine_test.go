@@ -7,10 +7,12 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Yanliangchan/unpackr/internal/config"
 	"github.com/Yanliangchan/unpackr/internal/worker"
+	"github.com/Yanliangchan/unpackr/pkg/models"
 	"github.com/Yanliangchan/unpackr/tests/fixtures"
 )
 
@@ -269,5 +271,54 @@ func TestModulesCanExcludeAnalysis(t *testing.T) {
 	}
 	if rep.Analysis != nil || rep.Binary == nil {
 		t.Fatalf("module selection ignored: analysis=%v binary=%v", rep.Analysis != nil, rep.Binary != nil)
+	}
+}
+
+func TestCapabilitiesAndAnomaliesInReport(t *testing.T) {
+	data := fixtures.BuildPE(fixtures.PESpec{
+		TextFlags: 0xe0000020, // rwx
+		Imports:   map[string][]string{"KERNEL32.dll": {"OpenProcess", "VirtualAllocEx", "WriteProcessMemory", "CreateRemoteThread", "ExitProcess"}},
+		Overlay:   append([]byte("MZ"), make([]byte, 64)...),
+	})
+	rep, err := Analyze(context.Background(), write(t, "s.bin", data), opts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cap, anom *models.Finding
+	for i := range rep.Findings {
+		f := &rep.Findings[i]
+		switch f.ID {
+		case "cap.inject.classic":
+			cap = f
+		case "anomaly.pe.section.writable-executable":
+			anom = f
+		}
+	}
+	if cap == nil || anom == nil {
+		t.Fatalf("findings: %+v", rep.Findings)
+	}
+	if cap.Class != models.ClassInference || len(cap.Attack) == 0 || cap.Attack[0] != "T1055" {
+		t.Fatalf("%+v", cap)
+	}
+	if !strings.Contains(cap.Summary, "consistent with") {
+		t.Fatalf("capability wording: %s", cap.Summary)
+	}
+	if anom.Class != models.ClassObservation || anom.Confidence != models.ConfidenceHigh {
+		t.Fatalf("%+v", anom)
+	}
+	seen := map[string]bool{}
+	for _, f := range rep.Findings {
+		if seen[f.ID] {
+			t.Errorf("duplicate finding id %s", f.ID)
+		}
+		seen[f.ID] = true
+		if f.Category == "capability" && f.Class != models.ClassInference {
+			t.Errorf("capability %s must be an inference", f.ID)
+		}
+	}
+	for _, n := range rep.NotRun {
+		if n == "capability-inference" || n == "anomaly-detection" {
+			t.Errorf("%s still listed as not run", n)
+		}
 	}
 }
