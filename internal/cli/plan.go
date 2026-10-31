@@ -154,11 +154,6 @@ func BuildPlan(f Flags, args []string) (Plan, error) {
 	case f.Reverse:
 		return p, &NotImplementedError{"-r/--reverse"}
 	}
-	for _, fm := range []string{p.Format, p.OutputFmt} {
-		if fm != "" && fm != "terminal" && fm != "json" {
-			return p, &NotImplementedError{"the " + fm + " report format"}
-		}
-	}
 	if p.OutputFmt == "terminal" {
 		return p, usagef("-o needs a file format (json), not terminal")
 	}
