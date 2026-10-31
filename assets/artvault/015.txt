@@ -1,0 +1,9 @@
+---
+id: 015
+category: compiler
+title: Linker error
+---
+   /usr/bin/ld: (.text+0x1b): undefined reference to `main'
+   collect2: error: ld returned 1 exit status
+
+   Every symbol was resolved except the one that mattered.

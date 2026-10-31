@@ -1,0 +1,20 @@
+---
+id: 001
+category: low-level
+title: Stack frame
+---
+        high addresses
+   +------------------------+
+   |  stack argument n      |   [rbp + 0x10 + 8n]
+   +------------------------+
+   |  return address        |   [rbp + 0x08]
+   +------------------------+
+   |  saved rbp             |   [rbp]        <- rbp
+   +------------------------+
+   |  local variables       |   [rbp - 0x08]
+   +------------------------+                <- rsp
+        low addresses
+
+   push rbp
+   mov  rbp, rsp
+   sub  rsp, 0x20

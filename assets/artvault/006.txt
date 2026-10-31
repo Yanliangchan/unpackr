@@ -1,0 +1,12 @@
+---
+id: 006
+category: humour
+title: Year 2038
+---
+   time_t as a signed 32-bit integer
+
+   2038-01-19 03:14:07 UTC    0x7FFFFFFF     2147483647
+   2038-01-19 03:14:08 UTC    0x80000000    -2147483648
+                              wraps to  1901-12-13 20:45:52 UTC
+
+   Your embedded device will be fine. It has never been updated either.

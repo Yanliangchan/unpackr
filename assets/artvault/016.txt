@@ -1,0 +1,12 @@
+---
+id: 016
+category: os
+title: proc maps
+---
+   $ cat /proc/self/maps
+   00400000-00452000 r-xp 00000000 08:01 131 /usr/bin/example
+   7f3a1c000000-7f3a1c021000 rw-p 00000000 00:00 0
+   7ffd5c1e0000-7ffd5c201000 rw-p 00000000 00:00 0     [stack]
+   ffffffffff600000-ffffffffff601000 --xp 00000000 00:00 0 [vsyscall]
+
+   the address space, as the kernel sees it, one line per mapping

@@ -1,0 +1,14 @@
+---
+id: 014
+category: low-level
+title: glibc heap chunk
+---
+   chunk -> +------------------------------+
+            | prev_size  (if prev is free) |
+            +------------------------------+
+            | size                |A|M|P|  |
+   mem   -> +------------------------------+
+            | fd   (only while free)       |
+            | bk   (only while free)       |
+            | user data ...                |
+            +------------------------------+

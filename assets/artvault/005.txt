@@ -1,0 +1,13 @@
+---
+id: 005
+category: humour
+title: Null pointer
+---
+   int *p = NULL;
+   *p = 42;
+
+   Segmentation fault (core dumped)
+
+   si_signo = SIGSEGV    si_code = SEGV_MAPERR    si_addr = 0x0
+
+   The compiler warned you. In a different dialect of the language.

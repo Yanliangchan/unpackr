@@ -1,0 +1,14 @@
+---
+id: 012
+category: executable
+title: Import address table
+---
+   .text                                   .idata (filled in by the loader)
+
+   FF 15 a2 2f 00 00   call [rip+0x2fa2]   +------------------------------+
+                  \                    --> | kernel32!CreateFileW         |
+                   +-----------------------| kernel32!ReadFile            |
+                                           | kernel32!CloseHandle         |
+                                           +------------------------------+
+
+   the call site never learns the address until the loader writes it

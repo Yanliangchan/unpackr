@@ -1,0 +1,15 @@
+---
+id: 004
+category: os
+title: Four-level page walk
+---
+   virtual address (48 bits significant)
+
+   +---------+---------+---------+---------+--------------+
+   |  PML4   |  PDPT   |   PD    |   PT    |    offset    |
+   |  9 bits |  9 bits |  9 bits |  9 bits |   12 bits    |
+   +----+----+----+----+----+----+----+----+------+-------+
+        |         |         |         |           |
+   CR3 -> PML4 --> PDPT --> PD ------> PT --> frame + offset
+
+   every arrow is a memory read, which is why the TLB exists

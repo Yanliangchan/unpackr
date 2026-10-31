@@ -1,0 +1,9 @@
+version: "2"
+linters:
+  settings:
+    errcheck:
+      # Failing to write to a terminal is not actionable.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
