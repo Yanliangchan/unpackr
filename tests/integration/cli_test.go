@@ -86,6 +86,9 @@ func TestJSONOutputIsPureAndHasNoBanner(t *testing.T) {
 	if strings.Contains(r.stdout, "ArtVault") || strings.Contains(r.stdout, "\x1b[") {
 		t.Fatal("artwork or ANSI leaked into JSON")
 	}
+	if rep["binary"] == nil {
+		t.Fatalf("structure stage missing from JSON: %v", rep)
+	}
 	if rep["schema_version"] == nil || rep["not_run"] == nil {
 		t.Fatalf("missing fields: %v", rep)
 	}
@@ -255,5 +258,16 @@ func TestArtCommands(t *testing.T) {
 	}
 	if r := run(t, "art", "show", "nope"); r.code != 2 {
 		t.Fatalf("%v", r)
+	}
+}
+
+func TestModulesSelection(t *testing.T) {
+	p := write(t, t.TempDir(), "s", samplePE(), 0o600)
+	r := run(t, "-i", p, "--format", "json", "--modules", "identification")
+	if r.code != 0 || strings.Contains(r.stdout, `"binary"`) {
+		t.Fatalf("structure ran although not selected: %d", r.code)
+	}
+	if r := run(t, "-i", p, "--modules", "nonsense"); r.code != 2 {
+		t.Fatalf("code %d", r.code)
 	}
 }

@@ -42,7 +42,7 @@ type Plan struct {
 }
 
 // KnownModules lists the values accepted by --modules in this build.
-var KnownModules = []string{"identification"}
+var KnownModules = []string{"identification", "structure"}
 
 var allFormats = []string{"terminal", "json", "html", "markdown", "csv"}
 

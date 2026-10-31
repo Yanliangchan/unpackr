@@ -140,7 +140,7 @@ Run 'unpackr doctor' to check the sandbox and optional tools.`,
 	f.StringVarP(&fl.Output, "output", "o", "", "write a report; format inferred from the extension (.json)")
 	f.StringVar(&fl.Format, "format", "", "output format: terminal, json (html, markdown, csv are not implemented yet)")
 	f.StringVar(&fl.OutputDir, "output-dir", "", "directory for per-file JSON reports in batch mode")
-	f.StringVar(&fl.Modules, "modules", "", "comma-separated modules to run (available: identification)")
+	f.StringVar(&fl.Modules, "modules", "", "comma-separated modules to run (available: identification, structure)")
 	f.IntVar(&g.threads, "threads", 0, "concurrent analyses for batches (default from config)")
 	f.DurationVar(&g.timeout, "timeout", 0, "per-worker time limit, e.g. 90s (default from config)")
 	f.BoolVar(&g.offline, "offline", true, "never use the network (always true in this build)")
@@ -173,7 +173,7 @@ func (g *globals) run(cmd *cobra.Command, args []string) error {
 	if plan.Mode == ModeQuick {
 		profile = engine.ProfileQuick
 	}
-	opts := engine.Options{Config: cfg, Profile: profile}
+	opts := engine.Options{Config: cfg, Profile: profile, Modules: plan.Modules}
 
 	ctx, stop := signalContext()
 	defer stop()
