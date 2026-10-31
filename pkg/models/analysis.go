@@ -137,6 +137,38 @@ type Anomaly struct {
 	Evidence []string `json:"evidence"`
 }
 
+// YaraMatch is one rule that matched, with where it matched.
+type YaraMatch struct {
+	Rule        string `json:"rule"`
+	Namespace   string `json:"namespace"`          // builtin | user
+	Category    string `json:"category,omitempty"` // first tag: packer, language, installer ...
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	Strength    string `json:"strength,omitempty"`
+	Family      string `json:"family,omitempty"`
+	// Status is "tested" for built-in rules with fixtures, "experimental" for
+	// built-in rules without, and "user" for rules supplied by the analyst.
+	// Only tested rules count as evidence; the rest are listed for the analyst.
+	Status  string       `json:"status"`
+	Matches []YaraString `json:"matches"`
+}
+
+// YaraString is one pattern hit.
+type YaraString struct {
+	Identifier string `json:"identifier"`
+	Offset     int64  `json:"offset"`
+	Length     int    `json:"length"`
+	Data       string `json:"data,omitempty"`
+}
+
+// EngineStatus says whether an optional engine took part in the analysis.
+type EngineStatus struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"` // used | missing | failed | skipped
+	Version string `json:"version,omitempty"`
+	Detail  string `json:"detail,omitempty"`
+}
+
 // Analysis is the output of the content-analysis worker.
 type Analysis struct {
 	Entropy      EntropyInfo       `json:"entropy"`
@@ -147,4 +179,6 @@ type Analysis struct {
 	Capabilities []Capability      `json:"capabilities"`
 	Anomalies    []Anomaly         `json:"anomalies"`
 	Evidence     []Evidence        `json:"evidence"`
+	Yara         []YaraMatch       `json:"yara_matches"`
+	Engines      []EngineStatus    `json:"engines"`
 }

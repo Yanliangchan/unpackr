@@ -65,6 +65,7 @@ func Detect(in *analysis.Input) models.Fingerprint {
 		b.apple()
 	}
 	b.java()
+	b.yara()
 	b.cFamilyAlternatives()
 	return models.Fingerprint{
 		Languages: rank(b.languages),
@@ -371,5 +372,24 @@ func (b *builder) cFamilyAlternatives() {
 	}
 	if cl := b.languages["C++"]; cl != nil && cl.detail == "" {
 		cl.detail = fmt.Sprintf("%d supporting signal(s)", len(cl.signals))
+	}
+}
+
+// yara folds tested YARA-X matches into the hypotheses. A rule that reads the
+// same bytes as a native detector shares its family, so agreement between
+// engines is shown without being counted as independent corroboration.
+func (b *builder) yara() {
+	for cat, m := range map[string]map[string]*hyp{"language": b.languages, "compiler": b.compilers, "runtime": b.runtimes} {
+		for _, ym := range b.in.TestedYara(cat) {
+			fam := ym.Family
+			if fam == "" {
+				fam = "yara:" + ym.Rule
+			}
+			ev := b.in.YaraEvidence(ym, fam)
+			h := b.get(m, ym.Name)
+			h.signals = analysis.MergeSignal(h.signals, models.Signal{
+				ID: "fp.yara." + ym.Rule, Detail: ym.Description + " (YARA-X rule " + ym.Rule + ")", Strength: ym.Strength, Family: fam, Evidence: []string{ev},
+			}, "also matched by YARA-X rule "+ym.Rule)
+		}
 	}
 }

@@ -327,6 +327,8 @@ func renderAnalysis(w io.Writer, r *models.Report, verbose bool, st terminal.Sty
 		}
 	}
 
+	renderYara(w, a, verbose, st)
+
 	h("Stage 04 · Static intelligence")
 	fmt.Fprintf(w, "  %-10s %d found (%d ASCII, %d UTF-16); showing %d in JSON output\n", "Strings", a.Strings.Total, a.Strings.ASCII, a.Strings.UTF16, len(a.Strings.Shown))
 	renderCapabilities(w, a, verbose, st)
@@ -544,5 +546,46 @@ func renderComparison(w io.Writer, c *models.Comparison, verbose bool, st termin
 	}
 	if !any {
 		fmt.Fprintf(w, "    %s\n", st.Dim("no differences found in the compared properties"))
+	}
+}
+
+func renderYara(w io.Writer, a *models.Analysis, verbose bool, st terminal.Style) {
+	for _, e := range a.Engines {
+		line := e.Status
+		switch e.Status {
+		case "used":
+			line = st.Green("used")
+		case "missing", "skipped":
+			line = st.Yellow(e.Status)
+		case "failed":
+			line = st.Red("failed")
+		}
+		v := ""
+		if e.Version != "" {
+			v = " " + e.Version
+		}
+		d := ""
+		if e.Detail != "" {
+			d = st.Dim("  " + safe(e.Detail))
+		}
+		fmt.Fprintf(w, "  %-10s %s%s: %s%s\n", "Engine", safe(e.Name), v, line, d)
+	}
+	if len(a.Yara) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "  %-10s %d rule(s) matched; only \"tested\" rules count as evidence\n", "YARA-X", len(a.Yara))
+	for _, m := range a.Yara {
+		tag := m.Status
+		switch m.Status {
+		case "tested":
+			tag = st.Green(tag)
+		default:
+			tag = st.Yellow(tag)
+		}
+		off := ""
+		if verbose && len(m.Matches) > 0 {
+			off = st.Dim(fmt.Sprintf("  @0x%x", m.Matches[0].Offset))
+		}
+		fmt.Fprintf(w, "  %-10s · %s [%s] %s%s\n", "", safe(m.Rule), tag, safe(m.Description), off)
 	}
 }

@@ -26,8 +26,9 @@ const TaskAnalyze = "analyze"
 
 // AnalyzeParams carries the structure result into the worker.
 type AnalyzeParams struct {
-	Family string         `json:"family"`
-	Binary *models.Binary `json:"binary,omitempty"`
+	Family string             `json:"family"`
+	Binary *models.Binary     `json:"binary,omitempty"`
+	Yara   []models.YaraMatch `json:"yara,omitempty"`
 }
 
 func init() {
@@ -44,12 +45,12 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		return RunAnalysis(data, p.Family, p.Binary), nil
+		return RunAnalysis(data, p.Family, p.Binary, p.Yara), nil
 	})
 }
 
 // RunAnalysis is the pure core of the analyze task.
-func RunAnalysis(data []byte, family string, bin *models.Binary) *models.Analysis {
+func RunAnalysis(data []byte, family string, bin *models.Binary, yaraMatches []models.YaraMatch) *models.Analysis {
 	// Universal Mach-O: work on the first slice's section table for mapping.
 	view := bin
 	if view != nil && len(view.Slices) > 0 {
@@ -84,7 +85,7 @@ func RunAnalysis(data []byte, family string, bin *models.Binary) *models.Analysi
 
 	scan := content.ExtractStrings(data)
 	sink := analysis.NewSink("analysis")
-	in := &analysis.Input{Data: data, Family: family, Bin: view, Scan: scan, Entropy: &ent, Sink: sink}
+	in := &analysis.Input{Data: data, Family: family, Bin: view, Scan: scan, Entropy: &ent, Sink: sink, Yara: yaraMatches}
 
 	fp := fingerprint.Detect(in)
 	pk := packing.Assess(in)
@@ -110,14 +111,16 @@ func RunAnalysis(data []byte, family string, bin *models.Binary) *models.Analysi
 		Fingerprint:  fp,
 		Packing:      pk,
 		Evidence:     sink.Evidence,
+		Yara:         yaraMatches,
 	}
 	return out
 }
 
 // runAnalysis executes the analyze worker and merges the result.
-func runAnalysis(ctx context.Context, f *os.File, size int64, rep *models.Report, family string, wo worker.Options) {
+func runAnalysis(ctx context.Context, f *os.File, size int64, rep *models.Report, family string, wo worker.Options, o Options) {
+	matches, eng := runYara(ctx, f, size, o)
 	start := time.Now()
-	res, err := worker.Run(ctx, TaskAnalyze, AnalyzeParams{Family: family, Binary: rep.Binary}, f, size, wo)
+	res, err := worker.Run(ctx, TaskAnalyze, AnalyzeParams{Family: family, Binary: rep.Binary, Yara: matches}, f, size, wo)
 	run := models.ModuleRun{Name: "content-analysis", DurationMS: time.Since(start).Milliseconds()}
 	if res != nil {
 		sb := res.Sandbox
@@ -137,6 +140,10 @@ func runAnalysis(ctx context.Context, f *os.File, size int64, rep *models.Report
 	}
 	run.Status = "ok"
 	rep.Modules = append(rep.Modules, run)
+	a.Engines = append(a.Engines, eng)
+	if a.Yara == nil {
+		a.Yara = []models.YaraMatch{}
+	}
 	rep.Analysis = &a
 	rep.Evidence = append(rep.Evidence, a.Evidence...)
 	addAnalysisFindings(rep, &a)
@@ -251,6 +258,20 @@ func addAnalysisFindings(rep *models.Report, a *models.Analysis) {
 		})
 	}
 
+	if len(a.Yara) > 0 {
+		var parts []string
+		for _, m := range a.Yara {
+			parts = append(parts, fmt.Sprintf("%s [%s]", m.Rule, m.Status))
+		}
+		rep.Findings = append(rep.Findings, models.Finding{
+			ID: "signatures.yara", Rule: "yara/matches", Class: models.ClassObservation, Category: "signatures",
+			Title:    fmt.Sprintf("%d YARA-X rule(s) matched", len(a.Yara)),
+			Summary:  "Matched: " + joinComma(parts) + ". Only rules marked tested count as evidence; experimental and analyst rules are listed for review.",
+			Severity: models.SeverityInfo, Confidence: models.ConfidenceHigh,
+			Rationale:  "the rule engine reported the match; the weight given to it is stated per rule",
+			EvidenceID: []string{},
+		})
+	}
 	if len(a.Indicators) > 0 {
 		counts := map[string]int{}
 		for _, i := range a.Indicators {
