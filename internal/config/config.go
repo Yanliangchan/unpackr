@@ -14,13 +14,16 @@ import (
 
 // Config holds user-tunable settings. Defaults are conservative.
 type Config struct {
-	Threads        int    `yaml:"threads"`          // bounded concurrency for batches
-	TimeoutSeconds int    `yaml:"timeout_seconds"`  // per worker
-	MaxFileSizeMB  int64  `yaml:"max_file_size_mb"` // input limit
-	WorkerMemoryMB int64  `yaml:"worker_memory_mb"` // RLIMIT_AS per worker
-	RequireSandbox bool   `yaml:"require_sandbox"`  // fail closed
-	MaxBatchFiles  int    `yaml:"max_batch_files"`  // directory scan cap
-	Banner         string `yaml:"banner"`           // random | NNN | category | off
+	Threads        int     `yaml:"threads"`          // bounded concurrency for batches
+	TimeoutSeconds int     `yaml:"timeout_seconds"`  // per worker
+	MaxFileSizeMB  int64   `yaml:"max_file_size_mb"` // input limit
+	WorkerMemoryMB int64   `yaml:"worker_memory_mb"` // RLIMIT_AS per worker
+	RequireSandbox bool    `yaml:"require_sandbox"`  // fail closed
+	MaxBatchFiles  int     `yaml:"max_batch_files"`  // directory scan cap
+	UnpackMaxMB    int64   `yaml:"unpack_max_mb"`    // largest accepted unpacked output
+	UnpackMaxRatio float64 `yaml:"unpack_max_ratio"` // largest accepted expansion (bomb guard)
+	MaxUnpackDepth int     `yaml:"max_unpack_depth"` // nested layers
+	Banner         string  `yaml:"banner"`           // random | NNN | category | off
 }
 
 // Default returns the built-in configuration.
@@ -35,6 +38,9 @@ func Default() Config {
 		MaxFileSizeMB:  2048,
 		WorkerMemoryMB: 4096,
 		MaxBatchFiles:  100000,
+		UnpackMaxMB:    1024,
+		UnpackMaxRatio: 200,
+		MaxUnpackDepth: 3,
 		Banner:         "random",
 	}
 }
@@ -101,6 +107,8 @@ func (c Config) Validate() error {
 		return fmt.Errorf("max_file_size_mb must be positive")
 	case c.WorkerMemoryMB < 64:
 		return fmt.Errorf("worker_memory_mb must be at least 64")
+	case c.UnpackMaxMB < 1 || c.UnpackMaxRatio < 1 || c.MaxUnpackDepth < 0 || c.MaxUnpackDepth > 10:
+		return fmt.Errorf("unpack_max_mb and unpack_max_ratio must be positive and max_unpack_depth 0-10")
 	case c.MaxBatchFiles < 1:
 		return fmt.Errorf("max_batch_files must be positive")
 	}

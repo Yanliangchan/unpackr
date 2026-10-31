@@ -34,10 +34,10 @@ A path may appear before or after flags. A file literally named `doctor`,
 | | `--offline` | accepted | Always true; the build has no network code |
 | | `--no-banner`, `--banner SEL`, `--quiet`, `--no-color` | works | Presentation |
 | `-d` | `--deep` | **not implemented** | Exit 4 |
-| `-u` | `--unpack` | **not implemented** | Exit 4 |
+| `-u` | `--unpack` | works for UPX | Unpacks UPX-packed files with `upx -d` in a sandbox, validates, analyses and compares the result. Needs `upx` installed. Output goes to `<output-dir>/artifacts/` (default `./unpackr-out/artifacts/`) as `<sha256>.bin`, mode 0600. Other packers report `not-applicable` |
 | `-x` | `--extract` | **not implemented** | Exit 4 |
 | `-r` | `--reverse` | **not implemented** | Exit 4 |
-| `-c` | `--compare` | **not implemented** | Exit 4 (after argument validation) |
+| `-c` | `--compare` | works | Exactly two files; shows header, section, import, export, entropy, packing, fingerprint, capability, indicator and string differences. `--format json` / `-o x.json` give the structured comparison |
 | | `--format html\|markdown\|csv` | **not implemented** | Exit 4 |
 | `-h` | `--help` | works | |
 
@@ -81,3 +81,17 @@ require_sandbox: false
 max_batch_files: 100000
 banner: random
 ```
+
+## Unpacking policy
+
+- Only UPX is supported. A file indicating any other packer reports
+  `not-applicable` with the packer named; UNPACKR is not a generic unpacker.
+- The external tool never runs unconfined: if Landlock and seccomp cannot be
+  fully applied, UPX is not started and the attempt is reported as
+  `unavailable`.
+- The tool receives a copy of the sample in a private 0700 directory, which is
+  deleted afterwards. The original is never opened for writing.
+- Output limits: `unpack_max_mb` (default 1024), `unpack_max_ratio` (default
+  200x, a decompression-bomb guard), `max_unpack_depth` (default 3).
+- A failed or rejected unpack leaves no file behind and does not affect the rest
+  of the report.

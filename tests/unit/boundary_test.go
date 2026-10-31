@@ -2,15 +2,31 @@
 package unit
 
 import (
+	"io/fs"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
 const mod = "github.com/Yanliangchan/unpackr/"
 
+// touchSources reads every Go file so that the test cache is invalidated when
+// any source changes: `go list` runs in a subprocess the cache cannot see.
+func touchSources(t *testing.T) {
+	t.Helper()
+	_ = filepath.WalkDir("../..", func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && (strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "go.mod")) {
+			_, _ = os.ReadFile(p)
+		}
+		return nil
+	})
+}
+
 func deps(t *testing.T, pkg string) []string {
 	t.Helper()
+	touchSources(t)
 	cmd := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", mod+pkg)
 	cmd.Dir = "../.."
 	out, err := cmd.CombinedOutput()
@@ -58,5 +74,12 @@ func TestNoHTTPClientInBinary(t *testing.T) {
 		if d == "net/http" {
 			t.Errorf("the binary links net/http; the product must not contain an HTTP client")
 		}
+	}
+}
+
+// External-tool and comparison code is analysis logic, not presentation.
+func TestUnpackingAndComparisonAreIndependentOfPresentation(t *testing.T) {
+	for _, p := range []string{"internal/unpacking", "internal/comparison", "internal/worker", "internal/capabilities", "internal/anomalies", "internal/packing", "internal/fingerprint"} {
+		mustNotImport(t, p, "internal/terminal", "internal/cli", "internal/artvault")
 	}
 }

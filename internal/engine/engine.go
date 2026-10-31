@@ -32,6 +32,14 @@ type Options struct {
 	Exe string
 	// Modules restricts the run to the named modules; empty means all.
 	Modules []string
+	// Unpack asks for supported unpackers to be tried (UPX).
+	Unpack bool
+	// ArtifactDir receives unpacked files under artifacts/ (default ./unpackr-out).
+	ArtifactDir string
+	// UnpackerName overrides the UPX executable name (tests).
+	UnpackerName string
+	// Depth is the current unpacking depth; used internally for nested layers.
+	Depth int
 }
 
 // NotImplemented lists the investigation stages that this build does not
@@ -125,6 +133,9 @@ func Analyze(ctx context.Context, path string, o Options) (*models.Report, error
 		}
 		if wants(o.Modules, "analysis") && (family == "pe" || family == "elf" || family == "macho") {
 			runAnalysis(ctx, f, st.Size(), rep, family, wo)
+			if o.Unpack {
+				runUnpack(ctx, f, st.Size(), rep, o)
+			}
 		}
 	}
 

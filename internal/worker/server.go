@@ -20,12 +20,15 @@ var handlers = map[string]Handler{}
 func Register(task string, h Handler) { handlers[task] = h }
 
 // IsWorker reports whether this process was started as a worker.
-func IsWorker() bool { return os.Getenv(EnvVar) == "1" }
+func IsWorker() bool { v := os.Getenv(EnvVar); return v == "1" || v == ExecMode }
 
 // Serve runs the worker protocol and never returns to the caller's main.
 // Main (and TestMain in packages that use workers) calls it first thing when
 // IsWorker is true.
 func Serve() {
+	if os.Getenv(EnvVar) == ExecMode {
+		serveExec()
+	}
 	os.Exit(serve(os.Stdin, os.Stdout))
 }
 

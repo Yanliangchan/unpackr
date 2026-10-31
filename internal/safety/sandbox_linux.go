@@ -10,6 +10,7 @@ import (
 	"github.com/Yanliangchan/unpackr/pkg/models"
 	seccomp "github.com/elastic/go-seccomp-bpf"
 	"github.com/landlock-lsm/go-landlock/landlock"
+	llsyscall "github.com/landlock-lsm/go-landlock/landlock/syscall"
 	"golang.org/x/sys/unix"
 )
 
@@ -62,6 +63,15 @@ func ApplySandbox(o SandboxOptions) models.SandboxStatus {
 		if len(o.WritableDirs) > 0 {
 			rules = append(rules, landlock.RWDirs(o.WritableDirs...))
 		}
+		if len(o.ExecFiles) > 0 {
+			rules = append(rules, landlock.ROFiles(o.ExecFiles...))
+		}
+		if len(o.ReadFiles) > 0 {
+			rules = append(rules, landlock.PathAccess(landlock.AccessFSSet(llsyscall.AccessFSReadFile), o.ReadFiles...))
+		}
+		if len(o.ReadOnlyNoExec) > 0 {
+			rules = append(rules, landlock.PathAccess(landlock.AccessFSSet(llsyscall.AccessFSReadFile|llsyscall.AccessFSReadDir), o.ReadOnlyNoExec...))
+		}
 		if err := landlock.V5.BestEffort().RestrictPaths(rules...); err == nil {
 			st.Landlock = true
 		} else {
@@ -83,7 +93,7 @@ func ApplySandbox(o SandboxOptions) models.SandboxStatus {
 		Flag:       seccomp.FilterFlagTSync,
 		Policy: seccomp.Policy{
 			DefaultAction: seccomp.ActionAllow,
-			Syscalls:      []seccomp.SyscallGroup{{Action: seccomp.ActionErrno, Names: deniedSyscalls()}},
+			Syscalls:      []seccomp.SyscallGroup{{Action: seccomp.ActionErrno, Names: filterExec(deniedSyscalls(), o.AllowExec)}},
 		},
 	}
 	if err := seccomp.LoadFilter(f); err == nil {
@@ -112,4 +122,19 @@ var commonDenied = []string{
 func Describe(s models.SandboxStatus) string {
 	return fmt.Sprintf("%s (no_new_privs=%t landlock=%t abi=%d net=%t seccomp=%t memlimit=%t)",
 		s.Level, s.NoNewPrivs, s.Landlock, s.LandlockABI, s.LandlockNet, s.Seccomp, s.MemoryLimit)
+}
+
+// filterExec removes execve/execveat from the deny list when one exec is
+// allowed.
+func filterExec(names []string, allow bool) []string {
+	if !allow {
+		return names
+	}
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		if n != "execve" && n != "execveat" {
+			out = append(out, n)
+		}
+	}
+	return out
 }

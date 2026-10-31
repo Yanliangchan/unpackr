@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Yanliangchan/unpackr/tests/fixtures"
 )
 
 var bin string
@@ -202,14 +204,11 @@ func TestBatchDirectoryAndOutputDir(t *testing.T) {
 
 func TestUnimplementedFeaturesAreRefusedNotFaked(t *testing.T) {
 	p := write(t, t.TempDir(), "s", samplePE(), 0o600)
-	for _, flag := range []string{"-d", "-u", "-x", "-r"} {
+	for _, flag := range []string{"-d", "-x", "-r"} {
 		r := run(t, "-i", p, flag)
 		if r.code != 4 || r.stdout != "" {
 			t.Errorf("%s: code %d stdout %q", flag, r.code, r.stdout)
 		}
-	}
-	if r := run(t, "-c", p, p); r.code != 4 {
-		t.Errorf("-c: code %d", r.code)
 	}
 	if r := run(t, "-i", p, "-o", filepath.Join(t.TempDir(), "r.html")); r.code != 4 {
 		t.Errorf("html: code %d", r.code)
@@ -303,5 +302,93 @@ func TestAnalysisAppearsInTerminalAndJSON(t *testing.T) {
 	}
 	if rep.Analysis.Packing.State == "" || len(rep.Analysis.Indicators) == 0 {
 		t.Fatalf("%+v", rep)
+	}
+}
+
+func packedUPX(t *testing.T) string {
+	t.Helper()
+	return fixtures.PackWithUPX(t, fixtures.GoBinary(t, "linux", "amd64"))
+}
+
+func TestUnpackThroughTheCLI(t *testing.T) {
+	packed := packedUPX(t)
+	out := t.TempDir()
+	r := run(t, "-i", packed, "-u", "--output-dir", out, "--format", "json")
+	if r.code != 0 {
+		t.Fatalf("%d %s", r.code, r.stderr)
+	}
+	var rep struct {
+		Unpack struct {
+			Status string `json:"status"`
+		} `json:"unpack"`
+		Artifacts []struct {
+			Path   string `json:"path"`
+			Report struct {
+				Analysis struct {
+					Packing struct {
+						State string `json:"state"`
+					} `json:"packing"`
+				} `json:"analysis"`
+			} `json:"report"`
+		} `json:"artifacts"`
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &rep); err != nil {
+		t.Fatal(err)
+	}
+	if rep.Unpack.Status == "unavailable" {
+		t.Skipf("unpacking unavailable here")
+	}
+	if rep.Unpack.Status != "unpacked" || len(rep.Artifacts) != 1 {
+		t.Fatalf("%+v", rep)
+	}
+	if rep.Artifacts[0].Report.Analysis.Packing.State != "unpacked" {
+		t.Fatalf("the unpacked layer must be analysed: %+v", rep.Artifacts[0])
+	}
+	st, err := os.Stat(rep.Artifacts[0].Path)
+	if err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("artifact: %v %v", st, err)
+	}
+	if !strings.HasPrefix(rep.Artifacts[0].Path, out) {
+		t.Fatalf("artifact not under --output-dir: %s", rep.Artifacts[0].Path)
+	}
+	// Terminal output mentions the comparison.
+	r = run(t, "-i", packed, "-u", "--output-dir", out)
+	for _, want := range []string{"Unpacking", "unpacked", "Differences (packed -> unpacked)", "Analysis of the unpacked layer"} {
+		if !strings.Contains(r.stdout, want) {
+			t.Errorf("terminal output lacks %q", want)
+		}
+	}
+}
+
+func TestCompareThroughTheCLI(t *testing.T) {
+	packed := packedUPX(t)
+	plain := fixtures.GoBinary(t, "linux", "amd64")
+	r := run(t, "-c", packed, plain)
+	if r.code != 0 {
+		t.Fatalf("%d %s", r.code, r.stderr)
+	}
+	for _, want := range []string{"Comparison", "packing state", "confirmed-packed (UPX)", "only in"} {
+		if !strings.Contains(r.stdout, want) {
+			t.Errorf("lacks %q:\n%s", want, r.stdout)
+		}
+	}
+	r = run(t, "-c", plain, plain, "--format", "json")
+	var cmp struct {
+		Comparison struct {
+			Identical bool `json:"identical"`
+		} `json:"comparison"`
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &cmp); err != nil || !cmp.Comparison.Identical {
+		t.Fatalf("%v %s", err, r.stdout)
+	}
+	if r := run(t, "-c", plain, t.TempDir()); r.code != 2 {
+		t.Fatalf("directory argument: code %d", r.code)
+	}
+}
+
+func TestUnpackNotApplicableMessage(t *testing.T) {
+	r := run(t, "-i", fixtures.GoBinary(t, "linux", "amd64"), "-u", "--no-banner")
+	if r.code != 0 || !strings.Contains(r.stdout, "not-applicable") {
+		t.Fatalf("%d %s", r.code, r.stdout)
 	}
 }

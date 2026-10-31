@@ -34,6 +34,7 @@ type Plan struct {
 	Mode       Mode
 	Paths      []string
 	Verbose    bool
+	Unpack     bool
 	Format     string // terminal | json
 	OutputFile string
 	OutputFmt  string // format of OutputFile
@@ -97,6 +98,7 @@ func BuildPlan(f Flags, args []string) (Plan, error) {
 	}
 	p.Paths = args
 	p.Verbose = f.Verbose
+	p.Unpack = f.Unpack
 
 	p.Format = f.Format
 	if p.Format == "" {
@@ -147,14 +149,10 @@ func BuildPlan(f Flags, args []string) (Plan, error) {
 	switch {
 	case f.Deep:
 		return p, &NotImplementedError{"-d/--deep (extended analysis)"}
-	case f.Unpack:
-		return p, &NotImplementedError{"-u/--unpack"}
 	case f.Extract:
 		return p, &NotImplementedError{"-x/--extract"}
 	case f.Reverse:
 		return p, &NotImplementedError{"-r/--reverse"}
-	case p.Mode == ModeCompare:
-		return p, &NotImplementedError{"-c/--compare"}
 	}
 	for _, fm := range []string{p.Format, p.OutputFmt} {
 		if fm != "" && fm != "terminal" && fm != "json" {
