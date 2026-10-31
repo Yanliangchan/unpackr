@@ -358,7 +358,7 @@ Each result states: *imported*, *string-referenced*, or *call-referenced*
 (only if disassembly confirms a call site). Output never uses "calls" without
 call-site evidence.
 
-### 7.4 Emulation: policy decision (needs approval, see section 19)
+### 7.4 Emulation: policy decision (needs approval, see section 20)
 
 Tools like FLOSS (vivisect), speakeasy, Qiling and unipacker emulate sample
 code in a software CPU. That is **not host execution** but it is outside
