@@ -90,3 +90,16 @@ type Region struct {
 	Offset int64 `json:"offset"`
 	Size   int64 `json:"size"`
 }
+
+// Family returns "pe", "elf" or "macho" derived from Format.
+func (b *Binary) Family() string {
+	switch {
+	case len(b.Format) >= 2 && b.Format[:2] == "PE":
+		return "pe"
+	case len(b.Format) >= 3 && b.Format[:3] == "ELF":
+		return "elf"
+	case len(b.Format) >= 6 && b.Format[:6] == "Mach-O":
+		return "macho"
+	}
+	return ""
+}

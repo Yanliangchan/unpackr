@@ -267,7 +267,41 @@ func TestModulesSelection(t *testing.T) {
 	if r.code != 0 || strings.Contains(r.stdout, `"binary"`) {
 		t.Fatalf("structure ran although not selected: %d", r.code)
 	}
+	r = run(t, "-i", p, "--format", "json", "--modules", "identification,structure")
+	if r.code != 0 || strings.Contains(r.stdout, `"analysis"`) {
+		t.Fatalf("analysis ran although not selected: %d", r.code)
+	}
 	if r := run(t, "-i", p, "--modules", "nonsense"); r.code != 2 {
 		t.Fatalf("code %d", r.code)
+	}
+}
+
+func TestAnalysisAppearsInTerminalAndJSON(t *testing.T) {
+	data := samplePE()
+	data = append(data, []byte("see https://c2.badhost.xyz/beacon now")...)
+	p := write(t, t.TempDir(), "s.exe", data, 0o600)
+	r := run(t, "-i", p)
+	for _, want := range []string{"Technical fingerprint", "Packing and obfuscation", "Static intelligence", "c2.badhost.xyz"} {
+		if !strings.Contains(r.stdout, want) {
+			t.Errorf("terminal output lacks %q", want)
+		}
+	}
+	if !strings.Contains(r.stdout, "do not show that the sample uses or contacts them") {
+		t.Error("indicator disclaimer missing")
+	}
+	r = run(t, "-i", p, "--format", "json")
+	var rep struct {
+		Analysis struct {
+			Packing struct {
+				State string `json:"state"`
+			} `json:"packing"`
+			Indicators []struct{ Type, Value string } `json:"indicators"`
+		} `json:"analysis"`
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &rep); err != nil {
+		t.Fatal(err)
+	}
+	if rep.Analysis.Packing.State == "" || len(rep.Analysis.Indicators) == 0 {
+		t.Fatalf("%+v", rep)
 	}
 }

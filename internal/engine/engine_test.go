@@ -188,3 +188,86 @@ func TestStructureFailureDoesNotHideIdentification(t *testing.T) {
 		t.Fatalf("a broken file must not yield invented structure: %+v", rep.Binary)
 	}
 }
+
+func TestContentAnalysisStage(t *testing.T) {
+	data := fixtures.BuildPE(fixtures.PESpec{
+		Imports: map[string][]string{
+			"KERNEL32.dll": {"CreateFileW", "ReadFile", "WriteFile", "CloseHandle", "GetLastError", "HeapAlloc"},
+			"USER32.dll":   {"MessageBoxW", "GetMessageW", "DispatchMessageW", "CreateWindowExW"},
+		},
+		Overlay: []byte("config: http://203.0.113.9/panel.php and C:\\Windows\\Temp\\drop.exe"),
+	})
+	rep, err := Analyze(context.Background(), write(t, "s.bin", data), opts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := rep.Analysis
+	if a == nil {
+		t.Fatal("analysis missing")
+	}
+	var url, path, ip bool
+	for _, i := range a.Indicators {
+		url = url || (i.Type == "url" && i.Value == "http://203.0.113.9/panel.php")
+		path = path || (i.Type == "windows-path" && i.Value == "C:\\Windows\\Temp\\drop.exe")
+		ip = ip || (i.Type == "ipv4" && i.Value == "203.0.113.9")
+	}
+	if !url || !path {
+		t.Fatalf("indicators: %+v", a.Indicators)
+	}
+	if ip {
+		t.Fatal("host inside a URL must not be double-reported as a separate IP indicator")
+	}
+	if a.Packing.State != "unpacked" {
+		t.Fatalf("packing %+v", a.Packing)
+	}
+	if a.Entropy.File <= 0 || len(a.Entropy.Sections) == 0 || a.Entropy.Overlay == nil {
+		t.Fatalf("entropy %+v", a.Entropy)
+	}
+	if a.Strings.Total == 0 || len(a.Strings.Shown) == 0 {
+		t.Fatalf("strings %+v", a.Strings)
+	}
+	// Every finding must reference evidence that exists, and inferences must
+	// carry a rationale.
+	ids := map[string]bool{}
+	for _, e := range rep.Evidence {
+		ids[e.ID] = true
+	}
+	for _, f := range rep.Findings {
+		for _, id := range f.EvidenceID {
+			if !ids[id] {
+				t.Errorf("finding %s references missing evidence %s", f.ID, id)
+			}
+		}
+		if f.Class == "inference" && f.Rationale == "" {
+			t.Errorf("inference %s lacks a rationale", f.ID)
+		}
+	}
+	for _, name := range []string{"entropy-analysis", "string-extraction", "indicator-extraction", "packing-assessment", "language-and-compiler-identification"} {
+		for _, n := range rep.NotRun {
+			if n == name {
+				t.Errorf("%s still listed as not run", name)
+			}
+		}
+	}
+	var sawAnalysis bool
+	for _, m := range rep.Modules {
+		if m.Name == "content-analysis" && m.Status == "ok" && m.Sandbox != nil {
+			sawAnalysis = true
+		}
+	}
+	if !sawAnalysis {
+		t.Fatalf("module not recorded: %+v", rep.Modules)
+	}
+}
+
+func TestModulesCanExcludeAnalysis(t *testing.T) {
+	o := opts()
+	o.Modules = []string{"identification", "structure"}
+	rep, err := Analyze(context.Background(), write(t, "s.bin", minimalPE()), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Analysis != nil || rep.Binary == nil {
+		t.Fatalf("module selection ignored: analysis=%v binary=%v", rep.Analysis != nil, rep.Binary != nil)
+	}
+}

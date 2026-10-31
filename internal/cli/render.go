@@ -72,6 +72,9 @@ func renderReport(w io.Writer, r *models.Report, verbose bool, st terminal.Style
 	if r.Binary != nil {
 		renderBinary(w, r.Binary, verbose, st)
 	}
+	if r.Analysis != nil {
+		renderAnalysis(w, r, verbose, st)
+	}
 
 	if len(r.Warnings) > 0 {
 		h("Warnings")
@@ -134,7 +137,7 @@ func clip(s string, n int) string {
 func repeat(s string, n int) string { return strings.Repeat(s, n) }
 
 func renderBinary(w io.Writer, b *models.Binary, verbose bool, st terminal.Style) {
-	fmt.Fprintf(w, "\n%s\n", st.Bold(st.Cyan("Stage 02 · Executable structure")))
+	fmt.Fprintf(w, "\n%s\n", st.Bold(st.Cyan("Executable structure")))
 	kv := func(k, v string) { fmt.Fprintf(w, "  %-10s %s\n", k, v) }
 	kv("Format", fmt.Sprintf("%s, %s, %d-bit, %s-endian, %s", safe(b.Format), safe(b.Arch), b.Bits, b.Endian, b.Kind))
 	if b.Entry != nil {
@@ -238,4 +241,125 @@ func renderBinary(w io.Writer, b *models.Binary, verbose bool, st terminal.Style
 			fmt.Fprintf(w, "  %s %s\n", st.Yellow("!"), safe(a))
 		}
 	}
+}
+
+func confTag(c models.Confidence, st terminal.Style) string {
+	return st.Dim("[" + string(c) + " confidence]")
+}
+
+func renderHyps(w io.Writer, label string, hs []models.Hypothesis, verbose bool, st terminal.Style) {
+	if len(hs) == 0 {
+		fmt.Fprintf(w, "  %-10s %s\n", label, st.Dim("no indicators found"))
+		return
+	}
+	for i, h := range hs {
+		l := ""
+		if i == 0 {
+			l = label
+		} else {
+			l = "  or"
+		}
+		name := safe(h.Name)
+		if h.Detail != "" {
+			name += " — " + safe(h.Detail)
+		}
+		fmt.Fprintf(w, "  %-10s %s  %s\n", l, name, confTag(h.Confidence, st))
+		if verbose {
+			fmt.Fprintf(w, "  %-10s why: %s\n", "", safe(h.Rationale))
+			for _, sg := range h.Signals {
+				fmt.Fprintf(w, "  %-10s · [%s] %s\n", "", sg.Strength, safe(sg.Detail))
+			}
+		}
+	}
+}
+
+func renderAnalysis(w io.Writer, r *models.Report, verbose bool, st terminal.Style) {
+	a := r.Analysis
+	h := func(t string) { fmt.Fprintf(w, "\n%s\n", st.Bold(st.Cyan(t))) }
+
+	h("Stage 02 · Technical fingerprint")
+	renderHyps(w, "Language", a.Fingerprint.Languages, verbose, st)
+	renderHyps(w, "Compiler", a.Fingerprint.Compilers, verbose, st)
+	renderHyps(w, "Runtime", a.Fingerprint.Runtimes, verbose, st)
+
+	h("Stage 03 · Packing and obfuscation")
+	state := a.Packing.State
+	switch state {
+	case models.PackConfirmed, models.PackLikely:
+		state = st.Red(state)
+	case models.PackUnknown:
+		state = st.Yellow(state)
+	default:
+		state = st.Green(state)
+	}
+	line := state
+	if a.Packing.Family != "" {
+		line += "  " + safe(a.Packing.Family)
+	}
+	fmt.Fprintf(w, "  %-10s %s  %s\n", "State", line, confTag(a.Packing.Confidence, st))
+	fmt.Fprintf(w, "  %-10s %s\n", "", st.Dim(safe(a.Packing.Rationale)))
+	for _, n := range a.Packing.Notes {
+		fmt.Fprintf(w, "  %-10s %s\n", "", st.Dim(safe(n)))
+	}
+	for _, sg := range a.Packing.Signals {
+		fmt.Fprintf(w, "  %-10s · [%s] %s\n", "", sg.Strength, safe(sg.Detail))
+		if verbose {
+			for _, id := range sg.Evidence {
+				for _, e := range r.Evidence {
+					if e.ID == id && e.Loc.Offset != nil {
+						fmt.Fprintf(w, "  %-10s     %s\n", "", st.Dim(fmt.Sprintf("evidence %s at file offset 0x%x", id, *e.Loc.Offset)))
+					}
+				}
+			}
+		}
+	}
+	fmt.Fprintf(w, "  %-10s %.3f bits/byte over the whole file", "Entropy", a.Entropy.File)
+	if a.Entropy.Overlay != nil {
+		fmt.Fprintf(w, ", overlay %.3f", *a.Entropy.Overlay)
+	}
+	fmt.Fprintln(w)
+	if verbose {
+		for _, s := range a.Entropy.Sections {
+			fmt.Fprintf(w, "  %-10s %-18s %.3f  %s\n", "", clip(safe(s.Name), 18), s.Entropy, s.Perms)
+		}
+	}
+
+	h("Stage 04 · Static intelligence")
+	fmt.Fprintf(w, "  %-10s %d found (%d ASCII, %d UTF-16); showing %d in JSON output\n", "Strings", a.Strings.Total, a.Strings.ASCII, a.Strings.UTF16, len(a.Strings.Shown))
+	if len(a.Indicators) == 0 {
+		fmt.Fprintf(w, "  %-10s %s\n", "Indicators", st.Dim("none found"))
+		return
+	}
+	limit := 8
+	if verbose {
+		limit = len(a.Indicators)
+	}
+	byType := map[string][]models.Indicator{}
+	var types []string
+	for _, i := range a.Indicators {
+		if _, ok := byType[i.Type]; !ok {
+			types = append(types, i.Type)
+		}
+		byType[i.Type] = append(byType[i.Type], i)
+	}
+	sort.Strings(types)
+	for _, t := range types {
+		list := byType[t]
+		fmt.Fprintf(w, "\n  %s\n", st.Bold(fmt.Sprintf("%s (%d)", t, len(list))))
+		for n, i := range list {
+			if n >= limit {
+				fmt.Fprintf(w, "      … %d more (use -v)\n", len(list)-n)
+				break
+			}
+			extra := ""
+			if i.Count > 1 {
+				extra += fmt.Sprintf(" x%d", i.Count)
+			}
+			if i.Note != "" {
+				extra += " — " + i.Note
+			}
+			fmt.Fprintf(w, "      %s  %s\n", safe(i.Value), st.Dim(fmt.Sprintf("@0x%x%s", i.Offset, extra)))
+		}
+	}
+	fmt.Fprintf(w, "\n  %s\n", st.Dim("Indicators are strings found in the file. They do not show that the sample uses or contacts them."))
 }
