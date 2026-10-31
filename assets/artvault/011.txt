@@ -1,0 +1,14 @@
+---
+id: 011
+category: crypto
+title: Merkle tree
+---
+                 root = H( h01 || h23 )
+                 /                    \
+        h01 = H( h0 || h1 )     h23 = H( h2 || h3 )
+          /         \              /         \
+        h0          h1           h2          h3
+        |           |            |           |
+       tx0         tx1          tx2         tx3
+
+   change one leaf and every hash on its path to the root changes

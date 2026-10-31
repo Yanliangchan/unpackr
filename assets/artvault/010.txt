@@ -1,0 +1,12 @@
+---
+id: 010
+category: humour
+title: Off by one
+---
+   char buf[8];
+
+   for (i = 0; i <= 8; i++)       /* should be < */
+       buf[i] = 'A';              /* nine writes into eight bytes */
+
+   There are two hard problems in computer science:
+     cache invalidation, naming things, and off-by-one errors.

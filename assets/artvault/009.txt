@@ -1,0 +1,12 @@
+---
+id: 009
+category: os
+title: Raw system call
+---
+   ; exit(0) on x86-64 Linux, no libc involved
+
+   mov  eax, 60        ; __NR_exit
+   xor  edi, edi       ; status = 0
+   syscall             ; rcx <- rip, r11 <- rflags
+
+   The kernel clobbers rcx and r11 and asks nothing in return.

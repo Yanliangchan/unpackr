@@ -1,0 +1,14 @@
+---
+id: 003
+category: executable
+title: ELF identification
+---
+   $ xxd -l 16 ./a.out
+   00000000: 7f45 4c46 0201 0100 0000 0000 0000 0000  .ELF............
+
+   offset  bytes        field
+   0x00    7f 45 4c 46  magic: 0x7f 'E' 'L' 'F'
+   0x04    02           EI_CLASS    2 = 64-bit
+   0x05    01           EI_DATA     1 = little endian
+   0x06    01           EI_VERSION  1
+   0x07    00           EI_OSABI    0 = System V

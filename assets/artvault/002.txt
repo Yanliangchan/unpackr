@@ -1,0 +1,14 @@
+---
+id: 002
+category: executable
+title: PE header chain
+---
+   offset     bytes            meaning
+   ---------  ---------------  -------------------------------------------
+   0x0000     4D 5A            "MZ"  IMAGE_DOS_HEADER.e_magic
+   0x003C     xx xx xx xx      e_lfanew -----------------------------+
+      ...                                                            |
+   e_lfanew   50 45 00 00      "PE\0\0"  <---------------------------+
+   +0x04      IMAGE_FILE_HEADER      Machine, NumberOfSections, ...
+   +0x18      IMAGE_OPTIONAL_HEADER  0x10B = PE32   0x20B = PE32+
+   ...        IMAGE_SECTION_HEADER[] .text .rdata .data .rsrc

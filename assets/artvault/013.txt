@@ -1,0 +1,11 @@
+---
+id: 013
+category: humour
+title: Floating point
+---
+   >>> 0.1 + 0.2
+   0.30000000000000004
+   >>> 0.1 + 0.2 == 0.3
+   False
+
+   0.1 as binary64 is 0x3FB999999999999A, rounded up from a repeating fraction
