@@ -1,6 +1,6 @@
 # UNPACKR — Technical Architecture Review
 
-Status: **proposal for approval. Nothing here is implemented.**
+Status: **decisions approved; upstream verification complete (see `VERIFICATION.md`); final architecture below in section 21 supersedes earlier sections where they differ. Nothing is implemented.**
 
 ## 0. How to read this document
 
@@ -716,3 +716,84 @@ performance check, doc updates and an honest list of what remains.
 11. **UNPACKR's own licence** (affects what may be linked rather than spawned).
 12. **Verification spike:** approve doing milestone 0 before
     any product code, since several recommendations depend on `[V]` items.
+
+---
+
+## 21. Final architecture after verification
+
+Approved conditions: Kali CLI tool only (no web/desktop UI); Go orchestrator
+with isolated workers; SQLite local and internal; original samples not retained
+by default; emulation opt-in, isolated, off by default; YARA-X and UPX bundled
+only after verification; UNPACKR licensed Apache-2.0; no product code before
+milestone 0 is accepted. Evidence for every point is in `VERIFICATION.md`.
+
+### 21.1 Decisions confirmed by evidence
+
+| Decision | Evidence |
+|---|---|
+| PE base = `saferwall/pe` (MIT, v1.6.5) | Matches pefile on sections, imports, entry point, **imphash**; 8.7 ms vs pefile 281 ms on 8 MB; 0 panics in 900 mutations; stdlib `debug/pe` panicked 19 times |
+| YARA-X as signature engine, subprocess `yr` | BSD-3, 1.22.1 released 2026-10-26, 11 ms per CLI scan, 5 000 rules compile in 0.3 s |
+| SQLite via `modernc.org/sqlite` | Same speed as the alternative, FTS5 present, no cgo |
+| Integrate ssdeep/TLSH ports | Maintained Go ports found (MIT, Apache-2.0); they must be validated against the reference implementations before being trusted |
+| Rizin/Ghidra/capa/FLOSS via adapters | capa 10.0.0 and FLOSS 3.2.0 install and run; others unverified, see below |
+
+### 21.2 Decisions amended by evidence
+
+1. **Parsers run in a killable worker process.** go-macho hung on one mutated
+   input and Go cannot cancel a spinning goroutine. All format parsers execute
+   in a re-executed copy of the `unpackr` binary (`unpackr --worker parse`),
+   under the same sandbox as other workers, with a deadline. This needs no
+   additional install and also contains parser panics.
+2. **Sandbox is self-applied, not bubblewrap.** Landlock + seccomp-bpf +
+   `no_new_privs` + rlimits, applied by the worker on startup, works without
+   user namespaces (tested). Bubblewrap is an optional extra layer. Ubuntu 24.04
+   restricts unprivileged namespaces by default, so depending on bwrap would
+   leave default installs unsandboxed. `--require-sandbox` fails closed;
+   `doctor` prints the achieved level.
+3. **Import hash is pefile-compatible only.** LIEF's imphash differs. LIEF is
+   used for cross-checking structure, never for that hash.
+4. **UPX is built from upstream source** (5.3.1 at verification time) and pinned,
+   not taken from the distro (4.2.2). Unpack validation is structural; a
+   round trip is not byte-identical (observed 18 bytes differing), so the
+   original hash is never an expectation.
+5. **7-Zip:** upstream `7zz` built from source, not the distro `p7zip` 16.02.
+   unRAR code excluded.
+6. **Emulation backend = speakeasy (MIT, active) plus the vivisect-based
+   FLOSS path.** Qiling (last release 2023) and unipacker (2024) are dropped.
+7. **Rule packs carry per-pack licences.** Public corpora include GPL-2.0,
+   DRL-1.1 and Elastic-License-2.0 content that cannot go in the Apache-2.0
+   default pack. The default pack contains only redistributable rules (own,
+   capa-rules, permissive third party). Others are user-imported.
+8. **Ghidra via PyGhidra** (official, Apache-2.0, 3.2.0) instead of custom
+   headless script wrappers, pending the Kali hands-on check.
+9. **Go toolchain pin.** Some dependencies pull Go 1.26; the module pins an
+   explicit toolchain and the build is reproducible with vendoring.
+10. **Rule engine in the default path is exactly three things:** `yr`, the Go
+    detectors and the capa-subset evaluator. Everything else is an adapter.
+
+### 21.3 Still unverified (not on the critical path of the first release)
+
+Ghidra/PyGhidra runtime behaviour, Rizin and rz-ghidra on Kali, Detect It Easy
+`diec`, ILSpy, de4dot, capa-rules checkout, unblob extraction behaviour, RetDec
+and Binary Ninja status, Python bytecode decompiler coverage per Python
+version, UPX 5.x and 7zz builds, Kali kernel feature matrix, binary-refinery
+licence, pycdc identity. `spikes/verify-tools.sh` collects the host facts;
+adapters for these tools are not started until their line is closed.
+
+### 21.4 Revised delivery order
+
+1. Skeleton: module, CLI grammar and tests, config, `doctor`, artifact graph,
+   Finding/Evidence types, JSON schema, worker framework with the self-applied
+   sandbox, hashing, content-based identification, ArtVault loader.
+2. Parsers in workers: PE, ELF, Mach-O (full), with differential tests against
+   pefile/LIEF/readelf and fuzz targets.
+3. Intelligence: strings, entropy, `yr` packs, language/compiler fingerprinting,
+   packing assessment, anomalies, indicators, capabilities, ATT&CK, terminal and
+   JSON output. First usable `-i/-q/-d/-v`.
+4. Unpack/extract and compare (UPX, PyInstaller, containers).
+5. HTML/Markdown/CSV and batch.
+6. Reverse-engineering adapters, as each is verified on Kali.
+7. SQLite store, similarity (with calibration), YARA assistant, cases.
+8. Interactive terminal view.
+9. Opt-in emulation.
+10. Packaging for amd64/arm64 and Kali/Ubuntu verification.
