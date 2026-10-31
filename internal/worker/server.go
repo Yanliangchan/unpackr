@@ -39,7 +39,7 @@ func serve(stdin io.Reader, stdout io.Writer) (code int) {
 		return 2
 	}
 	// Confine before any untrusted byte is read.
-	st := safety.ApplySandbox(safety.SandboxOptions{MemoryLimitBytes: req.MemoryLimitBytes})
+	st := safety.ApplySandbox(safety.SandboxOptions{MemoryLimitBytes: req.MemoryLimitBytes, WritableDirs: req.WritableDirs})
 	resp := Response{Sandbox: st}
 
 	defer func() {

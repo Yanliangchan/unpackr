@@ -80,3 +80,36 @@ type Comparison struct {
 	Strings        []Change      `json:"strings"`
 	Notes          []string      `json:"notes"`
 }
+
+// ExtractedEntry is one item found inside an embedded container.
+type ExtractedEntry struct {
+	Name       string `json:"name"`
+	Type       string `json:"type"`      // single-letter code from the container
+	TypeName   string `json:"type_name"` // script, module, binary, data, pyz ...
+	Offset     int64  `json:"file_offset"`
+	StoredSize int64  `json:"stored_size"`
+	Size       int64  `json:"size"`
+	Compressed bool   `json:"compressed"`
+	Path       string `json:"path,omitempty"` // relative to Extraction.Dir; empty when skipped
+	SHA256     string `json:"sha256,omitempty"`
+	Format     string `json:"format,omitempty"` // content-based identification of the extracted bytes
+	Skipped    string `json:"skipped,omitempty"`
+}
+
+// Extraction records embedded content pulled out of a container. Extracted
+// files are data: they are written without execute permission and never run.
+type Extraction struct {
+	Requested     bool             `json:"requested"`
+	Status        string           `json:"status"` // extracted | not-applicable | failed | rejected
+	Kind          string           `json:"kind,omitempty"`
+	Message       string           `json:"message"`
+	Supported     []string         `json:"supported_containers"`
+	ArchiveFormat string           `json:"archive_format,omitempty"`
+	PythonVersion string           `json:"python_version,omitempty"`
+	ArchiveOffset int64            `json:"archive_offset,omitempty"`
+	ArchiveLength int64            `json:"archive_length,omitempty"`
+	Entries       []ExtractedEntry `json:"entries"`
+	TotalBytes    int64            `json:"total_bytes"`
+	Dir           string           `json:"dir,omitempty"`
+	Notes         []string         `json:"notes,omitempty"`
+}

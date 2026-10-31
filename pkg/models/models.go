@@ -177,6 +177,7 @@ type Report struct {
 	Analysis       *Analysis       `json:"analysis,omitempty"`
 	Unpack         *UnpackAttempt  `json:"unpack,omitempty"`
 	Artifacts      []Artifact      `json:"artifacts,omitempty"`
+	Extraction     *Extraction     `json:"extraction,omitempty"`
 	Findings       []Finding       `json:"findings"`
 	Evidence       []Evidence      `json:"evidence"`
 	Warnings       []Warning       `json:"warnings"`

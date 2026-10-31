@@ -34,6 +34,9 @@ type Request struct {
 	Params           json.RawMessage `json:"params,omitempty"`
 	InputSize        int64           `json:"input_size"`
 	MemoryLimitBytes uint64          `json:"memory_limit_bytes"`
+	// WritableDirs are the only locations the worker may write. Normally
+	// empty; extraction tasks get one private directory.
+	WritableDirs []string `json:"writable_dirs,omitempty"`
 }
 
 // Response is returned by the worker. It is untrusted.

@@ -35,6 +35,7 @@ type Plan struct {
 	Paths      []string
 	Verbose    bool
 	Unpack     bool
+	Extract    bool
 	Format     string // terminal | json
 	OutputFile string
 	OutputFmt  string // format of OutputFile
@@ -99,6 +100,7 @@ func BuildPlan(f Flags, args []string) (Plan, error) {
 	p.Paths = args
 	p.Verbose = f.Verbose
 	p.Unpack = f.Unpack
+	p.Extract = f.Extract
 
 	p.Format = f.Format
 	if p.Format == "" {
@@ -149,8 +151,6 @@ func BuildPlan(f Flags, args []string) (Plan, error) {
 	switch {
 	case f.Deep:
 		return p, &NotImplementedError{"-d/--deep (extended analysis)"}
-	case f.Extract:
-		return p, &NotImplementedError{"-x/--extract"}
 	case f.Reverse:
 		return p, &NotImplementedError{"-r/--reverse"}
 	}
