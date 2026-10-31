@@ -61,15 +61,15 @@ func OpenInput(path string, max int64) (*os.File, os.FileInfo, error) {
 	}
 	st, err := f.Stat()
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, nil, err
 	}
 	if !st.Mode().IsRegular() {
-		f.Close()
+		_ = f.Close()
 		return nil, nil, fmt.Errorf("%s is not a regular file", path)
 	}
 	if max > 0 && st.Size() > max {
-		f.Close()
+		_ = f.Close()
 		return nil, nil, fmt.Errorf("%s is %d bytes, above the configured limit of %d", path, st.Size(), max)
 	}
 	return f, st, nil

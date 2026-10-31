@@ -290,7 +290,7 @@ func probeJavaClass(r io.ReaderAt, size int64) *models.FormatCandidate {
 
 func probeZip(r io.ReaderAt, size int64) *models.FormatCandidate {
 	h := readAt(r, size, 0, 4)
-	if h == nil || !(bytes.Equal(h, []byte("PK\x03\x04")) || bytes.Equal(h, []byte("PK\x05\x06"))) {
+	if h == nil || (!bytes.Equal(h, []byte("PK\x03\x04")) && !bytes.Equal(h, []byte("PK\x05\x06"))) {
 		return nil
 	}
 	b := newBuilder("ZIP archive", "zip")

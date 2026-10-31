@@ -82,10 +82,10 @@ func TestPickAvoidsLastAndHonoursSelectors(t *testing.T) {
 
 func TestCustomArtworkIsValidatedNotTrusted(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "good.txt"), []byte("---\nid: c1\ncategory: mine\ntitle: T\n---\nhello\n"), 0o600)
-	os.WriteFile(filepath.Join(dir, "plain.txt"), []byte("plain art\n"), 0o600)
-	os.WriteFile(filepath.Join(dir, "evil.txt"), []byte("\x1b]0;pwned\x07\n"), 0o600)
-	os.WriteFile(filepath.Join(dir, "dup.txt"), []byte("---\nid: 001\n---\nx\n"), 0o600)
+	_ = os.WriteFile(filepath.Join(dir, "good.txt"), []byte("---\nid: c1\ncategory: mine\ntitle: T\n---\nhello\n"), 0o600)
+	_ = os.WriteFile(filepath.Join(dir, "plain.txt"), []byte("plain art\n"), 0o600)
+	_ = os.WriteFile(filepath.Join(dir, "evil.txt"), []byte("\x1b]0;pwned\x07\n"), 0o600)
+	_ = os.WriteFile(filepath.Join(dir, "dup.txt"), []byte("---\nid: 001\n---\nx\n"), 0o600)
 	v, warns, err := Load(assets.ArtVault, "artvault", dir)
 	if err != nil {
 		t.Fatal(err)
@@ -103,9 +103,9 @@ func TestCustomArtworkIsValidatedNotTrusted(t *testing.T) {
 
 func TestFavouritesAndLast(t *testing.T) {
 	d := t.TempDir()
-	AddFavourite(d, "007")
-	AddFavourite(d, "003")
-	AddFavourite(d, "007")
+	_ = AddFavourite(d, "007")
+	_ = AddFavourite(d, "003")
+	_ = AddFavourite(d, "007")
 	if f := Favourites(d); len(f) != 2 || f[0] != "003" {
 		t.Fatal(f)
 	}

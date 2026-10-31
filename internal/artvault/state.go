@@ -39,9 +39,7 @@ func Favourites(configDir string) []string {
 		return nil
 	}
 	var ids []string
-	for _, l := range strings.Fields(string(b)) {
-		ids = append(ids, l)
-	}
+	ids = append(ids, strings.Fields(string(b))...)
 	sort.Strings(ids)
 	return ids
 }

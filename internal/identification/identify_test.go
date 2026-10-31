@@ -90,8 +90,8 @@ func TestJar(t *testing.T) {
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
 	f, _ := w.Create("META-INF/MANIFEST.MF")
-	f.Write([]byte("Manifest-Version: 1.0\n"))
-	w.Close()
+	_, _ = f.Write([]byte("Manifest-Version: 1.0\n"))
+	_ = w.Close()
 	if p, _ := id(buf.Bytes()); p != "Java JAR" {
 		t.Fatalf("got %q", p)
 	}

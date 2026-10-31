@@ -55,7 +55,7 @@ func Analyze(ctx context.Context, path string, o Options) (*models.Report, error
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck // read-only descriptor
 
 	rep := &models.Report{
 		SchemaVersion: models.SchemaVersion,

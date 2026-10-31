@@ -50,9 +50,9 @@ func newDoctorCmd(g *globals) *cobra.Command {
 			out := cmd.OutOrStdout()
 			st := terminal.Style{On: terminal.ColorEnabled(os.Stdout, g.noColor)}
 			ok, bad := st.Green("ok"), st.Red("PROBLEM")
-			row := func(k, v string) { fmt.Fprintf(out, "  %-18s %s\n", k, v) }
+			row := func(k, v string) { _, _ = fmt.Fprintf(out, "  %-18s %s\n", k, v) }
 
-			fmt.Fprintln(out, st.Bold("UNPACKR doctor"))
+			_, _ = fmt.Fprintln(out, st.Bold("UNPACKR doctor"))
 			row("Version", version.Version)
 			row("Platform", version.Platform())
 			row("Network", "none used (only a loopback probe inside the sandbox self-test)")
@@ -65,7 +65,7 @@ func newDoctorCmd(g *globals) *cobra.Command {
 				row("ArtVault", fmt.Sprintf("%s: %d banners, %d custom file(s) rejected", ok, len(v.All()), len(warns)))
 			}
 
-			fmt.Fprintln(out, "\n"+st.Bold("Sandbox (a worker process is started and probed)"))
+			_, _ = fmt.Fprintln(out, "\n"+st.Bold("Sandbox (a worker process is started and probed)"))
 			res, werr := worker.Run(context.Background(), engine.TaskSelfTest, nil, nil, 0, worker.Options{
 				Timeout:          30 * time.Second,
 				MemoryLimitBytes: uint64(cfg.WorkerMemoryMB) << 20,
@@ -99,11 +99,11 @@ func newDoctorCmd(g *globals) *cobra.Command {
 					row("Open network", t.NetworkDial)
 				}
 				if sb.Level != safety.LevelFull {
-					fmt.Fprintln(out, "  "+st.Yellow("Confinement is not full on this system. Use require_sandbox: true to refuse to analyse without it."))
+					_, _ = fmt.Fprintln(out, "  "+st.Yellow("Confinement is not full on this system. Use require_sandbox: true to refuse to analyse without it."))
 				}
 			}
 
-			fmt.Fprintln(out, "\n"+st.Bold("Optional tools (detected only; no adapters exist in this build)"))
+			_, _ = fmt.Fprintln(out, "\n"+st.Bold("Optional tools (detected only; no adapters exist in this build)"))
 			for _, t := range optionalTools {
 				p, err := exec.LookPath(t.bin)
 				if err != nil {

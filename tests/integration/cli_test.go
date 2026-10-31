@@ -28,7 +28,7 @@ func TestMain(m *testing.M) {
 		panic(string(out))
 	}
 	code := m.Run()
-	os.RemoveAll(dir)
+	_ = os.RemoveAll(dir)
 	os.Exit(code)
 }
 

@@ -14,8 +14,8 @@ func safe(s string) string { return terminal.Sanitize(s) }
 // renderReport prints one report in the human-readable layout. Every string
 // that originates from the sample passes through Sanitize.
 func renderReport(w io.Writer, r *models.Report, verbose bool, st terminal.Style) {
-	h := func(t string) { fmt.Fprintf(w, "\n%s\n", st.Bold(st.Cyan(t))) }
-	kv := func(k, v string) { fmt.Fprintf(w, "  %-10s %s\n", k, v) }
+	h := func(t string) { _, _ = fmt.Fprintf(w, "\n%s\n", st.Bold(st.Cyan(t))) }
+	kv := func(k, v string) { _, _ = fmt.Fprintf(w, "  %-10s %s\n", k, v) }
 
 	h("Stage 01 · File identification")
 	kv("File", fmt.Sprintf("%s (%d bytes)", safe(r.File.Name), r.File.Size))

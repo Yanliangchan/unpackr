@@ -30,7 +30,7 @@ func init() {
 			out["net"] = "denied"
 		}
 		if err := os.WriteFile(os.TempDir()+"/unpackr-worker-test", []byte("x"), 0o600); err == nil {
-			os.Remove(os.TempDir() + "/unpackr-worker-test")
+			_ = os.Remove(os.TempDir() + "/unpackr-worker-test")
 			out["write_tmp"] = "ALLOWED"
 		} else {
 			out["write_tmp"] = "denied"
@@ -39,11 +39,11 @@ func init() {
 	})
 	Register("panic", func(ctx context.Context, in io.ReaderAt, size int64, p json.RawMessage) (any, error) {
 		var m map[string]int
-		m["x"] = 1
+		m["x"] = 1 //nolint:staticcheck // deliberate nil-map panic
 		return nil, nil
 	})
 	Register("spin", func(ctx context.Context, in io.ReaderAt, size int64, p json.RawMessage) (any, error) {
-		for {
+		for { //nolint:staticcheck // deliberate busy loop to test the kill path
 		}
 	})
 }
@@ -65,7 +65,7 @@ func tmpInput(t *testing.T, data string) (*os.File, int64) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { f.Close() })
+	t.Cleanup(func() { _ = f.Close() })
 	return f, int64(len(data))
 }
 
@@ -76,7 +76,7 @@ func TestEchoThroughInheritedFD(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out struct{ Data string }
-	json.Unmarshal(res.Raw, &out)
+	_ = json.Unmarshal(res.Raw, &out)
 	if out.Data != "hello sample" {
 		t.Fatalf("got %q", out.Data)
 	}
@@ -92,7 +92,7 @@ func TestSandboxConfinesWorker(t *testing.T) {
 		t.Skipf("kernel does not provide full confinement here: %+v", res.Sandbox)
 	}
 	var out map[string]string
-	json.Unmarshal(res.Raw, &out)
+	_ = json.Unmarshal(res.Raw, &out)
 	for k, v := range out {
 		if v != "denied" {
 			t.Errorf("%s: %s (sandbox did not confine)", k, v)

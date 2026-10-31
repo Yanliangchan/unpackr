@@ -34,10 +34,10 @@ func newArtCmd(g *globals) *cobra.Command {
 				if fav[b.ID] {
 					star = "*"
 				}
-				fmt.Fprintf(out, "%s %-12s %-12s %s\n", star, terminal.Sanitize(b.ID), terminal.Sanitize(b.Category), terminal.Sanitize(b.Title))
+				_, _ = fmt.Fprintf(out, "%s %-12s %-12s %s\n", star, terminal.Sanitize(b.ID), terminal.Sanitize(b.Category), terminal.Sanitize(b.Title))
 			}
 			for _, w := range warns {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %v\n", w)
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %v\n", w)
 			}
 			return nil
 		}},
@@ -50,7 +50,7 @@ func newArtCmd(g *globals) *cobra.Command {
 			if !ok {
 				return usagef("no banner with id %q (try 'unpackr art list')", args[0])
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), b.Text())
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), b.Text())
 			return nil
 		}},
 		&cobra.Command{Use: "categories", Short: "List banner categories", Args: usageArgs(cobra.NoArgs), RunE: func(cmd *cobra.Command, _ []string) error {
@@ -65,7 +65,7 @@ func newArtCmd(g *globals) *cobra.Command {
 			}
 			sort.Strings(names)
 			for _, n := range names {
-				fmt.Fprintf(cmd.OutOrStdout(), "%-14s %d\n", terminal.Sanitize(n), m[n])
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-14s %d\n", terminal.Sanitize(n), m[n])
 			}
 			return nil
 		}},
@@ -81,7 +81,7 @@ func newArtCmd(g *globals) *cobra.Command {
 		}},
 		&cobra.Command{Use: "favourites", Aliases: []string{"favorites"}, Short: "List favourite banners", Args: usageArgs(cobra.NoArgs), RunE: func(cmd *cobra.Command, _ []string) error {
 			for _, f := range artvault.Favourites(config.Dir()) {
-				fmt.Fprintln(cmd.OutOrStdout(), terminal.Sanitize(f))
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), terminal.Sanitize(f))
 			}
 			return nil
 		}},

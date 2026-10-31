@@ -6,7 +6,7 @@ import (
 )
 
 func TestSanitizeNeutralisesHostileStrings(t *testing.T) {
-	in := "a\x1b[2J\x1b]0;owned\x07b\rc‮evil\x00\xff"
+	in := "a\x1b[2J\x1b]0;owned\x07b\rc\u202eevil\x00\xff"
 	out := Sanitize(in)
 	for _, r := range out {
 		if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) || r == 0x202e {

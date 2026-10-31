@@ -8,7 +8,7 @@ import (
 
 func write(t *testing.T, s string) string {
 	p := filepath.Join(t.TempDir(), "c.yaml")
-	os.WriteFile(p, []byte(s), 0o600)
+	_ = os.WriteFile(p, []byte(s), 0o600)
 	return p
 }
 

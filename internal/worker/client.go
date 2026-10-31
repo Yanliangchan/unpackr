@@ -102,7 +102,7 @@ func Run(ctx context.Context, task string, params any, input *os.File, size int6
 		return nil, fmt.Errorf("start worker: %w", err)
 	}
 	werr := writeFrame(stdin, Request{Task: task, Params: rawParams, InputSize: size, MemoryLimitBytes: o.MemoryLimitBytes})
-	stdin.Close()
+	_ = stdin.Close()
 	waitErr := cmd.Wait()
 	res := &Result{Stderr: errb.buf.String(), Duration: time.Since(start)}
 

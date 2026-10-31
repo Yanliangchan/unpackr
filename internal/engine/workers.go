@@ -50,12 +50,12 @@ func SelfTest() SelfTestResult {
 	p := os.TempDir() + "/.unpackr-selftest"
 	err = os.WriteFile(p, []byte("x"), 0o600)
 	if err == nil {
-		os.Remove(p)
+		_ = os.Remove(p)
 	}
 	r.WriteTemp = state(err)
 	c, err := net.DialTimeout("tcp", "127.0.0.1:9", 500*time.Millisecond)
 	if err == nil {
-		c.Close()
+		_ = c.Close()
 	}
 	r.NetworkDial = state(err)
 	return r

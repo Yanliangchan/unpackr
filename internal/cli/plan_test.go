@@ -66,7 +66,7 @@ func TestBuildPlanGrammar(t *testing.T) {
 
 func TestReportNeverOverwritesInput(t *testing.T) {
 	in := filepath.Join(t.TempDir(), "sample.json")
-	os.WriteFile(in, []byte("{}"), 0o600)
+	_ = os.WriteFile(in, []byte("{}"), 0o600)
 	_, err := BuildPlan(Flags{Output: in}, []string{in})
 	var u *UsageError
 	if !errors.As(err, &u) {

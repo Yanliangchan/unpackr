@@ -85,12 +85,10 @@ func (g *globals) maybeBanner(cmd *cobra.Command, cfg config.Config, machineOutp
 	}
 	artvault.RememberShown(state, b.ID)
 	st := terminal.Style{On: terminal.ColorEnabled(os.Stderr, g.noColor)}
-	w := os.Stderr
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, st.Cyan(b.Text()))
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "%s %s  |  %s  |  offline  |  ArtVault #%s\n", st.Bold(version.Name), version.Version, version.Platform(), b.ID)
-	fmt.Fprintf(w, "%s\n", st.Dim(version.Tagline+"  "+repeat("-", 30)))
+	p := func(format string, a ...any) { _, _ = fmt.Fprintf(os.Stderr, format, a...) }
+	p("\n%s\n\n", st.Cyan(b.Text()))
+	p("%s %s  |  %s  |  offline  |  ArtVault #%s\n", st.Bold(version.Name), version.Version, version.Platform(), b.ID)
+	p("%s\n", st.Dim(version.Tagline+"  "+repeat("-", 30)))
 }
 
 // NewRoot builds the command tree.
@@ -274,7 +272,7 @@ func writeJSON(path string, v any) error {
 		return err
 	}
 	if err := encode(f, v); err != nil {
-		f.Close()
+		_ = f.Close()
 		return err
 	}
 	return f.Close()
