@@ -38,6 +38,10 @@ type Options struct {
 	ArtifactDir string
 	// UnpackerName overrides the UPX executable name (tests).
 	UnpackerName string
+	// YaraName overrides the YARA-X executable name (tests).
+	YaraName string
+	// UserRuleDir holds analyst-supplied YARA rules (never read implicitly by the engine).
+	UserRuleDir string
 	// Depth is the current unpacking depth; used internally for nested layers.
 	Depth int
 }
@@ -132,7 +136,7 @@ func Analyze(ctx context.Context, path string, o Options) (*models.Report, error
 			runStructure(ctx, f, st.Size(), rep, family, wo)
 		}
 		if wants(o.Modules, "analysis") && (family == "pe" || family == "elf" || family == "macho") {
-			runAnalysis(ctx, f, st.Size(), rep, family, wo)
+			runAnalysis(ctx, f, st.Size(), rep, family, wo, o)
 			if o.Unpack {
 				runUnpack(ctx, f, st.Size(), rep, o)
 			}

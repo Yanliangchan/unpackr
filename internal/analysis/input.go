@@ -19,6 +19,9 @@ type Input struct {
 	Scan    *content.Scan
 	Entropy *models.EntropyInfo
 	Sink    *Sink
+	// Yara holds matches from the optional YARA-X engine. Only matches with
+	// Status "tested" may be used as evidence.
+	Yara []models.YaraMatch
 }
 
 // Sink collects evidence and hands out stable identifiers.
@@ -137,4 +140,43 @@ func equalFold(a, b string) bool {
 		}
 	}
 	return true
+}
+
+// TestedYara returns the YARA matches that may count as evidence, in the given
+// category, each with its first hit location.
+func (in *Input) TestedYara(category string) []models.YaraMatch {
+	var out []models.YaraMatch
+	for _, m := range in.Yara {
+		if m.Status == "tested" && m.Category == category {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// YaraEvidence records a YARA match as evidence and returns the id.
+func (in *Input) YaraEvidence(m models.YaraMatch, family string) string {
+	off, length := int64(-1), int64(0)
+	if len(m.Matches) > 0 {
+		off, length = m.Matches[0].Offset, int64(m.Matches[0].Length)
+	}
+	section := ""
+	if off >= 0 {
+		section = in.SectionAt(off)
+	}
+	return in.Sink.Add("yara-match", "YARA-X rule "+m.Rule+": "+m.Description, off, length, section, "yara/"+m.Rule, family)
+}
+
+// MergeSignal adds a signal unless one with the same family and strength
+// already exists, in which case the existing signal is annotated instead:
+// two engines reading the same bytes agree, but do not corroborate.
+func MergeSignal(sigs []models.Signal, add models.Signal, note string) []models.Signal {
+	for i := range sigs {
+		if sigs[i].Family == add.Family {
+			sigs[i].Detail += " (" + note + ")"
+			sigs[i].Evidence = append(sigs[i].Evidence, add.Evidence...)
+			return sigs
+		}
+	}
+	return append(sigs, add)
 }

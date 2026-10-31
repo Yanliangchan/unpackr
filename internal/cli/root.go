@@ -36,6 +36,14 @@ type globals struct {
 	flags      Flags
 }
 
+// userRuleDir is where analysts keep their own YARA rules.
+func userRuleDir() string {
+	if d := config.Dir(); d != "" {
+		return filepath.Join(d, "rules")
+	}
+	return ""
+}
+
 func customArtDir() string {
 	if d := config.Dir(); d != "" {
 		return filepath.Join(d, "artvault", "custom")
@@ -177,7 +185,7 @@ func (g *globals) run(cmd *cobra.Command, args []string) error {
 	if plan.Mode == ModeQuick {
 		profile = engine.ProfileQuick
 	}
-	opts := engine.Options{Config: cfg, Profile: profile, Modules: plan.Modules, Unpack: plan.Unpack, ArtifactDir: plan.OutputDir}
+	opts := engine.Options{Config: cfg, Profile: profile, Modules: plan.Modules, Unpack: plan.Unpack, ArtifactDir: plan.OutputDir, UserRuleDir: userRuleDir()}
 
 	ctx, stop := signalContext()
 	defer stop()

@@ -69,6 +69,7 @@ func Assess(in *analysis.Input) models.PackingAssessment {
 	}
 
 	c.bytes()
+	c.yara()
 	c.sectionNameSignals()
 	c.structure()
 	c.entropy()
@@ -85,6 +86,20 @@ func (c *collector) bytes() {
 			c.add("pack.sig."+strings.ToLower(sig.name), sig.label+" found", "strong", "sig:"+sig.name, ev)
 			c.names(sig.name)
 		}
+	}
+}
+
+func (c *collector) yara() {
+	for _, m := range c.in.TestedYara("packer") {
+		fam := m.Family
+		if fam == "" {
+			fam = "yara:" + m.Rule
+		}
+		ev := c.in.YaraEvidence(m, fam)
+		c.signals = analysis.MergeSignal(c.signals, models.Signal{
+			ID: "pack.yara." + m.Rule, Detail: m.Description + " (YARA-X rule " + m.Rule + ")", Strength: m.Strength, Family: fam, Evidence: []string{ev},
+		}, "also matched by YARA-X rule "+m.Rule)
+		c.names(m.Name)
 	}
 }
 

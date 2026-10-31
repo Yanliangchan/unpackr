@@ -36,6 +36,12 @@ var optionalTools = []struct{ name, bin, role string }{
 	{"unblob", "unblob", "container extraction"},
 }
 
+// usedBy says what a detected tool is used for in this build.
+var usedBy = map[string]string{
+	"upx": "used by -u to unpack UPX",
+	"yr":  "used for signature scanning",
+}
+
 func newDoctorCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
@@ -103,14 +109,18 @@ func newDoctorCmd(g *globals) *cobra.Command {
 				}
 			}
 
-			_, _ = fmt.Fprintln(out, "\n"+st.Bold("Optional tools (detected only; no adapters exist in this build)"))
+			_, _ = fmt.Fprintln(out, "\n"+st.Bold("Optional tools"))
 			for _, t := range optionalTools {
 				p, err := exec.LookPath(t.bin)
 				if err != nil {
 					row(t.name, st.Dim("not found — "+t.role))
 					continue
 				}
-				row(t.name, p+" "+st.Dim(toolVersion(p)))
+				use := usedBy[t.bin]
+				if use == "" {
+					use = "detected only; no adapter yet"
+				}
+				row(t.name, p+" "+st.Dim(toolVersion(p)+"  ["+use+"]"))
 			}
 			fmt.Fprintln(out, "\n"+st.Dim("Missing optional tools never stop UNPACKR from working."))
 			return nil

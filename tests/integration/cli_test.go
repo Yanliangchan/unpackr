@@ -392,3 +392,39 @@ func TestUnpackNotApplicableMessage(t *testing.T) {
 		t.Fatalf("%d %s", r.code, r.stdout)
 	}
 }
+
+func TestYaraEngineInTerminalAndJSON(t *testing.T) {
+	if _, err := exec.LookPath("yr"); err != nil {
+		t.Skip("yr not installed")
+	}
+	plain := fixtures.GoBinary(t, "linux", "amd64")
+	r := run(t, "-i", plain, "--no-banner")
+	for _, want := range []string{"YARA-X", "go_buildinfo", "tested"} {
+		if !strings.Contains(r.stdout, want) {
+			t.Errorf("terminal output lacks %q", want)
+		}
+	}
+	r = run(t, "-i", plain, "--format", "json", "--modules", "identification,structure,analysis")
+	if strings.Contains(r.stdout, `"rule": "go_buildinfo"`) {
+		t.Fatal("signatures ran although not selected")
+	}
+	// An analyst rules directory is honoured but never trusted as evidence.
+	cfg := t.TempDir()
+	rules := filepath.Join(cfg, "unpackr", "rules")
+	if err := os.MkdirAll(rules, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rules, "mine.yar"), []byte(`rule goish { strings: $a = "Go buildinf" condition: $a }`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin, "-i", plain, "--format", "json")
+	cmd.Env = append(os.Environ(), "XDG_CONFIG_HOME="+cfg, "XDG_STATE_HOME="+t.TempDir())
+	var o bytes.Buffer
+	cmd.Stdout = &o
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(o.String(), `"rule": "goish"`) || !strings.Contains(o.String(), `"status": "user"`) {
+		t.Fatal("analyst rule did not run or was mislabelled")
+	}
+}
