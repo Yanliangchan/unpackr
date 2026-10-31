@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"time"
@@ -29,13 +30,15 @@ type Options struct {
 	Profile string
 	// Exe overrides the worker executable (tests).
 	Exe string
+	// Modules restricts the run to the named modules; empty means all.
+	Modules []string
 }
 
 // NotImplemented lists the investigation stages that this build does not
 // provide. They are written into every report so that a missing stage can
 // never be mistaken for a clean result.
 var NotImplemented = []string{
-	"format-structure-parsing (sections, imports, exports, resources)",
+	"structure-details: PE resources/TLS/relocations/debug directory/Authenticode validation, ELF notes and relocations, Mach-O code signature and chained fixups",
 	"language-and-compiler-identification",
 	"packing-assessment",
 	"entropy-analysis",
@@ -115,6 +118,9 @@ func Analyze(ctx context.Context, path string, o Options) (*models.Report, error
 			Message: "worker confinement was " + res.Sandbox.Level + ": " + res.Sandbox.Detail})
 	}
 	addIdentificationFindings(rep, &id)
+	if wants(o.Modules, "structure") && len(id.Candidates) > 0 && id.Primary != "unknown" {
+		runStructure(ctx, f, st.Size(), rep, id.Candidates[0].Family, wo)
+	}
 
 	// Evidence preservation: the input must be byte-identical afterwards.
 	h2, _, err := hashing.Sum(sectionReader(f, st.Size()))
@@ -224,4 +230,65 @@ func describe(c models.FormatCandidate) string {
 		s += fmt.Sprintf("; %s=%s", k, c.Attributes[k])
 	}
 	return s
+}
+
+// runStructure parses the executable structure in a worker. A failure is
+// recorded as a warning and a failed module; it never hides the identification.
+func runStructure(ctx context.Context, f *os.File, size int64, rep *models.Report, family string, wo worker.Options) {
+	switch family {
+	case "pe", "elf", "macho":
+	default:
+		return
+	}
+	start := time.Now()
+	res, err := worker.Run(ctx, TaskParse, ParseParams{Family: family}, f, size, wo)
+	run := models.ModuleRun{Name: "structure", DurationMS: time.Since(start).Milliseconds()}
+	if res != nil {
+		sb := res.Sandbox
+		run.Sandbox = &sb
+	}
+	if err != nil {
+		run.Status, run.Error = "failed", err.Error()
+		rep.Modules = append(rep.Modules, run)
+		rep.Warnings = append(rep.Warnings, models.Warning{Module: "structure", Message: err.Error()})
+		return
+	}
+	var b models.Binary
+	if err := json.Unmarshal(res.Raw, &b); err != nil {
+		run.Status, run.Error = "failed", "undecodable worker result: "+err.Error()
+		rep.Modules = append(rep.Modules, run)
+		return
+	}
+	run.Status = "ok"
+	rep.Modules = append(rep.Modules, run)
+	rep.Binary = &b
+	if len(b.Anomalies) > 0 {
+		var ids []string
+		for _, a := range b.Anomalies {
+			id := fmt.Sprintf("a%d", len(rep.Evidence)+1)
+			rep.Evidence = append(rep.Evidence, models.Evidence{ID: id, Kind: "parser-anomaly", Value: a,
+				Source: models.Source{Module: "structure", Engine: family + " parser"}, Family: "parser/" + family})
+			ids = append(ids, id)
+		}
+		rep.Findings = append(rep.Findings, models.Finding{
+			ID: "structure.parser-anomalies", Rule: "structure/parser-anomalies", Class: models.ClassObservation,
+			Category: "structure", Title: fmt.Sprintf("%d structural anomalies reported by the parser", len(b.Anomalies)),
+			Summary:  "The parser noticed inconsistencies while reading the file. Each one is a fact about the file's bytes; none is by itself a verdict about intent.",
+			Severity: models.SeverityInfo, Confidence: models.ConfidenceHigh,
+			Rationale:  "reported directly by the format parser",
+			EvidenceID: ids, Action: "Review each anomaly; damaged or unusual headers are common in packed, protected and hand-made files, and also in corrupt ones.",
+		})
+	}
+}
+
+func wants(sel []string, name string) bool {
+	if len(sel) == 0 {
+		return true
+	}
+	for _, s := range sel {
+		if s == name {
+			return true
+		}
+	}
+	return false
 }

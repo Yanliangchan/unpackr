@@ -20,13 +20,13 @@ A path may appear before or after flags. A file literally named `doctor`,
 
 | Short | Long | Status | Meaning |
 |---|---|---|---|
-| `-i` | `--info` | works | Identification, hashes. The default when only a path is given |
+| `-i` | `--info` | works | Identification, hashes, executable structure. The default when only a path is given |
 | `-q` | `--quick` | works | Same stages as `-i` today; accepts directories and prints a table |
-| `-v` | `--verbose` | works | Show check-level evidence with file offsets, module timings, sandbox detail |
+| `-v` | `--verbose` | works | Show check-level evidence with file offsets, header attributes, every imported/exported symbol, module timings, sandbox detail |
 | `-o` | `--output FILE` | works for `.json` | Write a report; format inferred from the extension |
 | | `--format` | `terminal`, `json` | `json` writes only JSON to stdout |
 | | `--output-dir DIR` | works | Batch: one `<sha256>.json` per sample |
-| | `--modules` | `identification` only | Select modules |
+| | `--modules` | `identification`, `structure` | Run only the named modules (identification always runs) |
 | | `--threads N` | works | Concurrent analyses in batch mode |
 | | `--timeout D` | works | Per-worker time limit, e.g. `90s` |
 | | `--config FILE` | works | YAML configuration |

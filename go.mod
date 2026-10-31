@@ -10,8 +10,15 @@ require (
 )
 
 require (
+	github.com/ayoubfaouzi/pkcs7 v0.2.3 // indirect
+	github.com/blacktop/go-dwarf v1.1.0 // indirect
+	github.com/blacktop/go-macho v1.1.296 // indirect
+	github.com/edsrzf/mmap-go v1.1.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/saferwall/pe v1.6.5 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
+	golang.org/x/crypto v0.39.0 // indirect
+	golang.org/x/text v0.26.0 // indirect
 )
 
 require (

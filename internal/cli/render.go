@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/Yanliangchan/unpackr/internal/terminal"
@@ -68,6 +69,10 @@ func renderReport(w io.Writer, r *models.Report, verbose bool, st terminal.Style
 		}
 	}
 
+	if r.Binary != nil {
+		renderBinary(w, r.Binary, verbose, st)
+	}
+
 	if len(r.Warnings) > 0 {
 		h("Warnings")
 		for _, wn := range r.Warnings {
@@ -127,3 +132,110 @@ func clip(s string, n int) string {
 }
 
 func repeat(s string, n int) string { return strings.Repeat(s, n) }
+
+func renderBinary(w io.Writer, b *models.Binary, verbose bool, st terminal.Style) {
+	fmt.Fprintf(w, "\n%s\n", st.Bold(st.Cyan("Stage 02 · Executable structure")))
+	kv := func(k, v string) { fmt.Fprintf(w, "  %-10s %s\n", k, v) }
+	kv("Format", fmt.Sprintf("%s, %s, %d-bit, %s-endian, %s", safe(b.Format), safe(b.Arch), b.Bits, b.Endian, b.Kind))
+	if b.Entry != nil {
+		e := fmt.Sprintf("RVA 0x%x  VA 0x%x", b.Entry.RVA, b.Entry.VA)
+		if b.Entry.Section != "" {
+			e += "  in " + safe(b.Entry.Section)
+		} else {
+			e += "  " + st.Yellow("(not inside any section)")
+		}
+		if verbose && b.Entry.FileOffset != nil {
+			e += fmt.Sprintf("  file offset 0x%x", *b.Entry.FileOffset)
+		}
+		kv("Entry", e)
+	}
+	if b.CompiledAt != "" {
+		kv("Timestamp", b.CompiledAt+" "+st.Dim("(header value; trivially forged)"))
+	}
+	if b.ImportHash != "" {
+		kv("Imphash", b.ImportHash)
+	}
+	if len(b.Slices) > 0 {
+		kv("Slices", safe(b.Attributes["architectures"]))
+	}
+	if verbose {
+		keys := make([]string, 0, len(b.Attributes))
+		for k := range b.Attributes {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			kv(safe(k), safe(b.Attributes[k]))
+		}
+	}
+	table := func(title string, secs []models.Section) {
+		if len(secs) == 0 {
+			return
+		}
+		fmt.Fprintf(w, "\n  %s\n", st.Bold(title))
+		fmt.Fprintf(w, "  %-26s %-12s %-10s %-10s %-10s %s\n", "name", "virt addr", "virt size", "raw off", "raw size", "perm")
+		for _, s := range secs {
+			perm := s.Perms
+			if perm == "rwx" {
+				perm = st.Red(perm)
+			}
+			fmt.Fprintf(w, "  %-26s 0x%-10x 0x%-8x 0x%-8x 0x%-8x %s\n", clip(safe(s.Name), 26), s.VirtualAddress, s.VirtualSize, s.RawOffset, s.RawSize, perm)
+		}
+	}
+	table("Sections", b.Sections)
+	table("Segments (loader view)", b.Segments)
+	for i, sl := range b.Slices {
+		fmt.Fprintf(w, "\n  %s\n", st.Bold(fmt.Sprintf("Slice %d: %s", i+1, safe(sl.Arch))))
+		table("  Segments", sl.Segments)
+	}
+
+	if len(b.Libraries) > 0 {
+		fmt.Fprintf(w, "\n  %s\n", st.Bold("Linked libraries"))
+		for _, l := range b.Libraries {
+			fmt.Fprintf(w, "  - %s\n", safe(l))
+		}
+	}
+	if len(b.Imports) > 0 {
+		total := 0
+		for _, im := range b.Imports {
+			total += len(im.Functions)
+		}
+		fmt.Fprintf(w, "\n  %s\n", st.Bold(fmt.Sprintf("Imports: %d symbols from %d libraries", total, len(b.Imports))))
+		for _, im := range b.Imports {
+			tag := ""
+			if im.Delay {
+				tag = " (delay-load)"
+			}
+			fmt.Fprintf(w, "  %-36s %d%s\n", clip(safe(im.Library), 36), len(im.Functions), tag)
+			if verbose {
+				for _, f := range im.Functions {
+					name := f.Name
+					if f.ByOrdinal {
+						name = fmt.Sprintf("#%d", f.Ordinal)
+					}
+					fmt.Fprintf(w, "      %s\n", safe(name))
+				}
+			}
+		}
+	}
+	if len(b.Exports) > 0 {
+		fmt.Fprintf(w, "\n  %s\n", st.Bold(fmt.Sprintf("Exports: %d", len(b.Exports))))
+		if verbose {
+			for _, e := range b.Exports {
+				fmt.Fprintf(w, "      %s  rva 0x%x\n", safe(e.Name), e.RVA)
+			}
+		}
+	}
+	if b.Overlay != nil {
+		fmt.Fprintf(w, "\n  Overlay    %d bytes at file offset 0x%x (data after the last section; not necessarily malicious)\n", b.Overlay.Size, b.Overlay.Offset)
+	}
+	if b.Truncated {
+		fmt.Fprintf(w, "  %s\n", st.Yellow("only the first part of this large file was parsed"))
+	}
+	if len(b.Anomalies) > 0 {
+		fmt.Fprintf(w, "\n  %s\n", st.Bold("Parser anomalies"))
+		for _, a := range b.Anomalies {
+			fmt.Fprintf(w, "  %s %s\n", st.Yellow("!"), safe(a))
+		}
+	}
+}
