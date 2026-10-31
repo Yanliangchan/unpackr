@@ -172,6 +172,7 @@ type Report struct {
 	File           FileInfo        `json:"file"`
 	Identification *Identification `json:"identification,omitempty"`
 	Binary         *Binary         `json:"binary,omitempty"`
+	Analysis       *Analysis       `json:"analysis,omitempty"`
 	Findings       []Finding       `json:"findings"`
 	Evidence       []Evidence      `json:"evidence"`
 	Warnings       []Warning       `json:"warnings"`

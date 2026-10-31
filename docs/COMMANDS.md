@@ -26,7 +26,7 @@ A path may appear before or after flags. A file literally named `doctor`,
 | `-o` | `--output FILE` | works for `.json` | Write a report; format inferred from the extension |
 | | `--format` | `terminal`, `json` | `json` writes only JSON to stdout |
 | | `--output-dir DIR` | works | Batch: one `<sha256>.json` per sample |
-| | `--modules` | `identification`, `structure` | Run only the named modules (identification always runs) |
+| | `--modules` | `identification`, `structure`, `analysis` | Run only the named modules (identification always runs). `analysis` covers entropy, strings, indicators, fingerprint and packing |
 | | `--threads N` | works | Concurrent analyses in batch mode |
 | | `--timeout D` | works | Per-worker time limit, e.g. `90s` |
 | | `--config FILE` | works | YAML configuration |

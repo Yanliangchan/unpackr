@@ -118,8 +118,14 @@ func Analyze(ctx context.Context, path string, o Options) (*models.Report, error
 			Message: "worker confinement was " + res.Sandbox.Level + ": " + res.Sandbox.Detail})
 	}
 	addIdentificationFindings(rep, &id)
-	if wants(o.Modules, "structure") && len(id.Candidates) > 0 && id.Primary != "unknown" {
-		runStructure(ctx, f, st.Size(), rep, id.Candidates[0].Family, wo)
+	if len(id.Candidates) > 0 && id.Primary != "unknown" {
+		family := id.Candidates[0].Family
+		if wants(o.Modules, "structure") {
+			runStructure(ctx, f, st.Size(), rep, family, wo)
+		}
+		if wants(o.Modules, "analysis") && (family == "pe" || family == "elf" || family == "macho") {
+			runAnalysis(ctx, f, st.Size(), rep, family, wo)
+		}
 	}
 
 	// Evidence preservation: the input must be byte-identical afterwards.

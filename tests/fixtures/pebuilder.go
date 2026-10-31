@@ -16,6 +16,8 @@ type PESpec struct {
 	Exports   []string            // exported names, all pointing into .text
 	Overlay   []byte
 	Timestamp uint32
+	// SectionNames overrides the section names in order (.text first).
+	SectionNames []string
 }
 
 const (
@@ -162,6 +164,12 @@ func BuildPE(s PESpec) []byte {
 	}
 	if len(edata) > 0 {
 		secs = append(secs, sect{".edata", edataRVA, edata, 0x40000040})
+	}
+
+	for i := range secs {
+		if i < len(s.SectionNames) {
+			secs[i].name = s.SectionNames[i]
+		}
 	}
 
 	const optSize = 0xf0
