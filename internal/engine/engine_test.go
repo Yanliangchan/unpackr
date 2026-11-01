@@ -338,3 +338,39 @@ func TestAnalysisCarriesFuzzyHashesAndStringSketch(t *testing.T) {
 		t.Fatal("fuzzy hashes must be deterministic")
 	}
 }
+
+func TestQuickProfileSkipsFuzzyHashingAndSaysSo(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sample.bin")
+	data := make([]byte, 64<<10)
+	for i := range data {
+		data[i] = byte(i*7 + i/13)
+	}
+	copy(data, []byte("\x7fELF"))
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		profile string
+		skipped bool
+	}{{ProfileQuick, true}, {ProfileInfo, false}} {
+		rep, err := Analyze(context.Background(), path, Options{Config: config.Default(), Profile: c.profile})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rep.Analysis == nil {
+			t.Fatalf("%s: no analysis", c.profile)
+		}
+		f := rep.Analysis.Fuzzy
+		listed := false
+		for _, n := range rep.NotRun {
+			listed = listed || n == NotRunFuzzy
+		}
+		if c.skipped && (f.SSDeep != "" || f.TLSH != "" || len(f.StringSketch) != 0 || !listed) {
+			t.Errorf("quick: fuzzy data present or skip not reported: %+v listed=%v", f, listed)
+		}
+		if !c.skipped && (f.SSDeep == "" || listed) {
+			t.Errorf("info: expected ssdeep and no skip notice: %+v listed=%v", f, listed)
+		}
+	}
+}

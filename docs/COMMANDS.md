@@ -24,7 +24,7 @@ A path may appear before or after flags. A file literally named `doctor`,
 | Short | Long | Status | Meaning |
 |---|---|---|---|
 | `-i` | `--info` | works | Identification, hashes, executable structure. The default when only a path is given |
-| `-q` | `--quick` | works | Same stages as `-i` today; accepts directories and prints a table |
+| `-q` | `--quick` | works | Skips ssdeep, TLSH and the string sketch (listed under `not_run` so an empty hash is never read as "unique"); accepts directories and prints a table |
 | `-v` | `--verbose` | works | Show check-level evidence with file offsets, header attributes, every imported/exported symbol, module timings, sandbox detail |
 | `-o` | `--output FILE` | works | Write a report; format inferred from `.json`, `.html`, `.md`, `.csv` |
 | | `--format` | `terminal`, `json`, `html`, `markdown`, `csv` | Non-terminal formats write only the document to stdout (no banner or progress). `csv` is the indicator list for one file and the summary table for several |
