@@ -24,7 +24,7 @@ Peak memory is about 22 MB for a 2 MB scan; inputs are read once and capped at
 
 ## Binary size
 
-11.0 MB stripped (it was 15.3 MB while the sample database used SQLite); the amd64 `.deb` is about 3.3 MB compressed.
+11.0 MB stripped (it was 15.3 MB while the sample database used SQLite); xz-compressed it is 3.2 MB (4.7 MB before), plus 1.1 MB for the viewer.
 
 | Part | Size | Notes |
 |---|---|---|
