@@ -258,7 +258,14 @@ func TestDeepProfileOnOrdinaryCodeFindsNothing(t *testing.T) {
 		}
 		return rep.Analysis
 	}
-	for name, p := range map[string]string{"clean C program": fixtures.CleanProgram(t), "Go program": fixtures.GoBinary(t, "linux", "amd64")} {
+	programs := map[string]string{"Go program": fixtures.GoBinary(t, "linux", "amd64")} // cross-built: x86-64 on any host
+	if runtime.GOARCH == "amd64" {
+		programs["clean C program"] = fixtures.CleanProgram(t) // built for the host, so x86-64 only here
+	} else if d := a(fixtures.CleanProgram(t)).Disasm; d == nil || d.Skipped == "" {
+		// On an ARM host the C program is ARM code: the pass must say it skipped.
+		t.Errorf("a host-architecture program that is not x86 must be reported as skipped: %+v", d)
+	}
+	for name, p := range programs {
 		d := a(p).Disasm
 		if d == nil || d.Skipped != "" || d.Instructions == 0 {
 			t.Fatalf("%s: nothing examined: %+v", name, d)
