@@ -262,10 +262,50 @@ func hasMarker(s string) bool {
 	return false
 }
 
+// dotnetMetadata turns the assembly's metadata statistics into signals. Each
+// is a property of the file's tables; none is specific to one protector, and
+// each says what it saw rather than naming a tool.
+func (c *collector) dotnetMetadata() {
+	dn := c.in.Bin.DotNet
+	if dn == nil {
+		return
+	}
+	n := dn.Names
+	switch {
+	case n.Total >= 50 && n.NonPrintable*4 >= n.Total:
+		ev := c.in.Sink.Add("dotnet", fmt.Sprintf("%d of %d type, method and field names contain control or non-ASCII characters", n.NonPrintable, n.Total), -1, 0, "", "packing/dotnet-unreadable-names", "dotnet:names")
+		c.add("pack.dotnet.unreadable-names", fmt.Sprintf("%d%% of the names in the metadata are unreadable (control or non-ASCII characters), the way renaming obfuscators leave them", n.NonPrintable*100/n.Total), "moderate", "dotnet:names", ev)
+	case n.Total >= 100 && n.Tiny*10 >= n.Total*7:
+		ev := c.in.Sink.Add("dotnet", fmt.Sprintf("%d of %d names are one or two characters long", n.Tiny, n.Total), -1, 0, "", "packing/dotnet-tiny-names", "dotnet:names")
+		c.add("pack.dotnet.tiny-names", fmt.Sprintf("%d%% of the names in the metadata are one or two characters (compilers do not produce this; renaming tools do)", n.Tiny*100/n.Total), "weak", "dotnet:names", ev)
+	}
+	// An executable whose methods mostly have no IL in the file gets its code
+	// from somewhere else at run time. Reference assemblies look the same but
+	// have no entry point.
+	if methods := dn.Counts["MethodDef"]; methods >= 20 && dn.EntryPoint != 0 && dn.MethodsWithoutBody*2 >= methods {
+		ev := c.in.Sink.Add("dotnet", fmt.Sprintf("%d of %d methods have no IL body in the file", dn.MethodsWithoutBody, methods), -1, 0, "", "packing/dotnet-missing-bodies", "dotnet:bodies")
+		c.add("pack.dotnet.missing-bodies", fmt.Sprintf("%d of %d methods that should contain code have none in the file: the code is supplied later (decrypted or loaded at run time)", dn.MethodsWithoutBody, methods), "moderate", "dotnet:bodies", ev)
+	}
+	for _, r := range dn.Resources {
+		if r.External || r.Size < 32*1024 {
+			continue
+		}
+		switch {
+		case r.Kind == "pe":
+			ev := c.in.Sink.Add("dotnet", fmt.Sprintf("resource %s (%d bytes) begins with an MZ header", r.Name, r.Size), int64(r.Offset), int64(r.Size), "", "packing/dotnet-embedded-pe", "dotnet:payload")
+			c.add("pack.dotnet.embedded-executable", fmt.Sprintf("manifest resource %q is a Windows executable embedded in the assembly (loaders and installers do this; so do droppers)", r.Name), "moderate", "dotnet:payload", ev)
+		case r.Entropy >= 7.5 && r.Size >= 64*1024:
+			ev := c.in.Sink.Add("entropy", fmt.Sprintf("resource %s entropy %.2f, %d bytes", r.Name, r.Entropy, r.Size), int64(r.Offset), int64(r.Size), "", "packing/dotnet-encrypted-resource", "entropy")
+			c.add("pack.dotnet.high-entropy-resource", fmt.Sprintf("manifest resource %q is %d bytes of near-random data (compressed or encrypted)", r.Name, r.Size), "weak", "entropy", ev)
+		}
+	}
+}
+
 func (c *collector) dotnet() {
 	if c.in.Bin.Attributes["has_clr_header"] != "true" {
 		return
 	}
+	c.dotnetMetadata()
 	for _, m := range obfuscatorMarkers {
 		if off := c.in.FindBytes([]byte(m)); off >= 0 {
 			ev := c.in.Sink.Add("signature", ".NET obfuscator marker "+m, off, int64(len(m)), c.in.SectionAt(off), "packing/dotnet-obfuscator", "name:dotnet-"+m)

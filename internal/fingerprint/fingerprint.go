@@ -180,6 +180,64 @@ func (b *builder) dotnet() {
 		rt.detail = "target " + h.Text
 		b.sig(rt, "rt.dotnet.target", "target framework attribute "+h.Text, "strong", "dotnet:target", ev3)
 	}
+	b.dotnetMetadata(rt)
+}
+
+// dotnetMetadata refines the .NET fingerprint with what the assembly's own
+// metadata says: the assemblies it references and its CLR flags.
+func (b *builder) dotnetMetadata(rt *hyp) {
+	in := b.in
+	dn := in.Bin.DotNet
+	if dn == nil {
+		return
+	}
+	has := func(prefix string) bool {
+		for _, r := range dn.AssemblyRefs {
+			if strings.HasPrefix(r, prefix+" ") {
+				return true
+			}
+		}
+		return false
+	}
+	flag := func(name string) bool {
+		for _, f := range dn.Flags {
+			if f == name {
+				return true
+			}
+		}
+		return false
+	}
+	switch {
+	case has("System.Private.CoreLib"):
+		if rt.detail == "" {
+			rt.detail = "references System.Private.CoreLib: modern .NET (formerly .NET Core)"
+		}
+		ev := in.Sink.Add("metadata", "AssemblyRef System.Private.CoreLib", -1, 0, "", "fingerprint/dotnet/corelib", "dotnet:corlib")
+		b.sig(rt, "rt.dotnet.corelib", "references System.Private.CoreLib", "moderate", "dotnet:corlib", ev)
+	case has("mscorlib"):
+		if rt.detail == "" {
+			rt.detail = "references mscorlib: .NET Framework (or Mono)"
+		}
+		ev := in.Sink.Add("metadata", "AssemblyRef mscorlib", -1, 0, "", "fingerprint/dotnet/mscorlib", "dotnet:corlib")
+		b.sig(rt, "rt.dotnet.mscorlib", "references mscorlib", "moderate", "dotnet:corlib", ev)
+	}
+	if has("FSharp.Core") {
+		ev := in.Sink.Add("metadata", "AssemblyRef FSharp.Core", -1, 0, "", "fingerprint/dotnet/fsharp", "dotnet:fsharp")
+		b.sig(b.get(b.languages, "F#"), "lang.fsharp.core", "references FSharp.Core", "strong", "dotnet:fsharp", ev)
+	}
+	if has("Microsoft.VisualBasic") {
+		ev := in.Sink.Add("metadata", "AssemblyRef Microsoft.VisualBasic", -1, 0, "", "fingerprint/dotnet/vb", "dotnet:vb")
+		b.sig(b.get(b.languages, "VB.NET"), "lang.vb.runtime", "references Microsoft.VisualBasic (also used by C# code that opts in, so only moderate)", "moderate", "dotnet:vb", ev)
+	}
+	if has("Microsoft.VisualC") {
+		cl := b.get(b.languages, "C++/CLI (managed C++)")
+		ev := in.Sink.Add("metadata", "AssemblyRef Microsoft.VisualC", -1, 0, "", "fingerprint/dotnet/cppcli", "dotnet:visualc")
+		b.sig(cl, "lang.cppcli.visualc", "references Microsoft.VisualC, the support library of the C++/CLI compiler", "strong", "dotnet:visualc", ev)
+		if flag("native-entry-point") || !flag("il-only") {
+			ev2 := in.Sink.Add("header", "CLR flags: "+strings.Join(dn.Flags, ", "), -1, 0, "", "fingerprint/dotnet/mixed", "dotnet:mixed")
+			b.sig(cl, "lang.cppcli.mixed", "the assembly mixes native and managed code (not IL-only)", "moderate", "dotnet:mixed", ev2)
+		}
+	}
 }
 
 func (b *builder) python() {

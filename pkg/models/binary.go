@@ -24,6 +24,8 @@ type Binary struct {
 	Libraries []string  `json:"libraries,omitempty"` // ELF DT_NEEDED, Mach-O dylibs
 
 	Overlay *Region `json:"overlay,omitempty"`
+	// DotNet is set for managed assemblies whose metadata could be read.
+	DotNet *DotNet `json:"dotnet,omitempty"`
 
 	// Hashes of structure: stable identifiers for similarity.
 	ImportHash string `json:"import_hash,omitempty"` // pefile-compatible imphash (PE only)
@@ -102,4 +104,60 @@ func (b *Binary) Family() string {
 		return "macho"
 	}
 	return ""
+}
+
+// DotNet describes the metadata of a managed (.NET) assembly. It is read from
+// the file's tables only; no code is run and no method body is decompiled.
+type DotNet struct {
+	MetadataVersion string           `json:"metadata_version,omitempty"` // e.g. v4.0.30319
+	Flags           []string         `json:"clr_flags,omitempty"`
+	EntryPoint      uint32           `json:"entry_point_token,omitempty"`
+	Streams         []DotNetStream   `json:"streams"`
+	AssemblyName    string           `json:"assembly_name,omitempty"`
+	AssemblyVersion string           `json:"assembly_version,omitempty"`
+	ModuleName      string           `json:"module_name,omitempty"`
+	Counts          map[string]int   `json:"counts"`
+	AssemblyRefs    []string         `json:"assembly_refs,omitempty"`
+	PInvokes        []DotNetPInvoke  `json:"pinvokes,omitempty"`
+	MemberRefs      []string         `json:"member_refs,omitempty"` // "Type.Member" pairs the code refers to
+	Resources       []DotNetResource `json:"resources,omitempty"`
+	// Identifier statistics, used to judge name obfuscation.
+	Names DotNetNames `json:"names"`
+	// MethodsWithoutBody counts methods that should have IL but have none in
+	// the file (encrypted or fetched at run time by some protectors).
+	MethodsWithoutBody int      `json:"methods_without_body"`
+	Anomalies          []string `json:"anomalies,omitempty"`
+	Truncated          bool     `json:"truncated,omitempty"`
+}
+
+// DotNetStream is one metadata heap.
+type DotNetStream struct {
+	Name   string `json:"name"`
+	Offset uint64 `json:"file_offset"`
+	Size   uint32 `json:"size"`
+}
+
+// DotNetPInvoke is a native function the assembly declares it calls.
+type DotNetPInvoke struct {
+	Module   string `json:"module"`
+	Function string `json:"function"`
+}
+
+// DotNetResource is a manifest resource.
+type DotNetResource struct {
+	Name     string  `json:"name"`
+	Size     uint32  `json:"size"`
+	Offset   uint64  `json:"file_offset,omitempty"`
+	Entropy  float64 `json:"entropy,omitempty"`
+	Kind     string  `json:"kind,omitempty"` // pe | zip | gzip | ""
+	External bool    `json:"external,omitempty"`
+}
+
+// DotNetNames summarises how readable the type, method and field names are.
+type DotNetNames struct {
+	Total        int `json:"total"`
+	NonPrintable int `json:"non_printable"` // contain control or non-ASCII characters outside letters
+	NonASCII     int `json:"non_ascii"`
+	Tiny         int `json:"tiny"` // one or two characters
+	Unique       int `json:"unique"`
 }
