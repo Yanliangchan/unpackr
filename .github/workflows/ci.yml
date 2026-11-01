@@ -1,0 +1,75 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Optional tools used by tests (tests skip cleanly without them)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends upx-ucl binutils
+          python3 -m venv "$RUNNER_TEMP/pyi"
+          "$RUNNER_TEMP/pyi/bin/pip" install --quiet pyinstaller pefile lief
+          echo "$RUNNER_TEMP/pyi/bin" >> "$GITHUB_PATH"
+
+      - name: YARA-X (built from crates.io, cached)
+        uses: actions/cache@v4
+        id: yrx
+        with:
+          path: ~/yrx
+          key: yrx-${{ runner.arch }}-1.22.1
+      - if: steps.yrx.outputs.cache-hit != 'true'
+        run: cargo install yara-x-cli --locked --version 1.22.1 --root ~/yrx
+      - run: echo "$HOME/yrx/bin" >> "$GITHUB_PATH"
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Tests (race detector)
+        run: go test -race ./...
+
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+
+  cross-build:
+    name: cross-build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - {goos: linux, goarch: amd64}
+          - {goos: linux, goarch: arm64}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -trimpath -o /dev/null ./cmd/unpackr
