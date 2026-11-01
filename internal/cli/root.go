@@ -160,6 +160,7 @@ Run 'unpackr doctor' to check the sandbox and optional tools.`,
 	f.BoolVar(&g.requireSB, "require-sandbox", false, "refuse to analyse unless workers are fully sandboxed")
 
 	root.AddCommand(newDoctorCmd(g), newArtCmd(g), newDBCmd(g), newCaseCmd(g), newSimilarCmd(g))
+	root.AddCommand(newGenCmd(g, root))
 	return root
 }
 
