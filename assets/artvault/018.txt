@@ -1,0 +1,18 @@
+---
+id: 018
+category: executable
+title: PE section flags
+---
+   section   characteristics   meaning
+   -------   ---------------   ---------------------------------------------
+   .text     0x60000020        code | execute | read
+   .rdata    0x40000040        initialised data | read
+   .data     0xC0000040        initialised data | read | write
+   .rsrc     0x40000040        initialised data | read
+
+   bit 0x00000020  contains code        bit 0x20000000  executable
+   bit 0x00000040  initialised data     bit 0x40000000  readable
+                                        bit 0x80000000  writable
+
+   a section that is both writable and executable (0xE0000020) is rare in
+   compiled code and common in packers and self-modifying stubs

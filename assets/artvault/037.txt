@@ -1,0 +1,15 @@
+---
+id: 037
+category: crypto
+title: Base64
+---
+   3 bytes  ->  4 characters      (every 6 bits becomes one of A-Za-z0-9+/)
+
+   M       Z       0x90                 bytes  4D 5A 90
+   01001101 01011010 10010000
+   010011 010101 101001 010000          regrouped by 6
+     T      V      p      Q  ...        "TVqQ"
+
+   a Windows executable begins "TVqQ", "TVpQ" or "TVoA" in base64
+
+   33 percent larger, and plain enough to search for

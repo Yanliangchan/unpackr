@@ -1,0 +1,19 @@
+---
+id: 025
+category: reverse
+title: Windows x64 calls
+---
+   call f(a, b, c, d, e)
+
+   rcx = a    rdx = b    r8 = c    r9 = d       first four arguments
+   [rsp+0x20] = e                               the rest go on the stack
+   rax = result                                 floats come back in xmm0
+
+          +------------------+
+          | return address   | <- rsp after the call
+          +------------------+
+          | 32 bytes shadow  |   the caller always reserves this space,
+          | space for rcx..r9|   even for functions with fewer arguments
+          +------------------+
+
+   callee-saved: rbx rbp rdi rsi r12 r13 r14 r15

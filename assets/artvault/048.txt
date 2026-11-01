@@ -1,0 +1,16 @@
+---
+id: 048
+category: crypto
+title: Avalanche
+---
+   good hash: change one input bit, about half of the output bits change
+
+   input   "attack at dawn"   ->  3f 9a 41 07 c2 ...
+   input   "attack at dawo"   ->  b8 02 e6 5d 90 ...   (one bit apart)
+
+             3f9a41 07c2       0011 1111 1001 1010 ...
+             b802e6 5d90       1011 1000 0000 0010 ...
+                               ^^   ^^^  ^^^^ ^^^^  about half differ
+
+   a hash without this property leaks structure; a fuzzy hash (ssdeep,
+   TLSH) wants the opposite on purpose: similar input, similar output

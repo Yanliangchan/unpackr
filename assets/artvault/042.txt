@@ -1,0 +1,16 @@
+---
+id: 042
+category: os
+title: Page table entry
+---
+   one 64-bit entry maps one 4 KiB page:
+
+   bit  0  P     present                bit  5  A    accessed
+   bit  1  R/W   writable               bit  6  D    dirty
+   bit  2  U/S   user may access        bit  7  PS   large page
+   bit  3  PWT   write-through          bit  8  G    global
+   bit  4  PCD   cache disable          bits 12-51   physical frame number
+                                        bit 63  NX   no execute: data, not code
+
+   a page that is writable and not NX can be written and then run, so
+   systems that enforce W^X refuse that combination

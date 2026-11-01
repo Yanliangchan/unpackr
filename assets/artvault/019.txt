@@ -1,0 +1,20 @@
+---
+id: 019
+category: executable
+title: Two views of an ELF
+---
+        linking view                         execution view
+        (section headers)                    (program headers)
+
+     +------------------+                 +----------------------+
+     | .text            |--+              | PT_LOAD   r-x        |
+     | .rodata          |--+------------->|  .text .rodata       |
+     +------------------+                 +----------------------+
+     | .data            |--+              | PT_LOAD   rw-        |
+     | .bss             |--+------------->|  .data .bss          |
+     +------------------+                 +----------------------+
+     | .symtab .strtab  |  (not loaded)   | PT_INTERP, PT_DYNAMIC|
+     +------------------+                 +----------------------+
+
+   the loader reads only the right-hand side: a file with its section headers
+   stripped or damaged still runs, which is why packers remove them

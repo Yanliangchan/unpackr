@@ -1,0 +1,18 @@
+---
+id: 030
+category: reverse
+title: Control-flow flattening
+---
+   original                       flattened
+
+      A                              +-------------------+
+      |                  state=A --> |   dispatcher      | <-----+
+      B                              |  switch (state)   |       |
+     / \                             +--+----+----+---+--+       |
+    C   D                               |    |    |   |          |
+     \ /                               A    B    C   D  ...      |
+      E                                 |    |    |   |          |
+                                        +----+----+---+--(state=next)
+
+   every block returns to one dispatcher, the order is hidden in a state
+   variable, and the same large constants are stored and then compared

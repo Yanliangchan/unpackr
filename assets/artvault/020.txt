@@ -1,0 +1,16 @@
+---
+id: 020
+category: executable
+title: Who runs first
+---
+   Windows PE                          Linux ELF
+
+   loader maps the image               kernel maps the image and PT_INTERP
+        |                                    |
+   TLS callbacks     <-- before the          ld.so loads libraries, relocates
+        |                entry point!       |
+   entry point                         DT_INIT / DT_INIT_ARRAY functions
+        |                                    |
+   mainCRTStartup -> main              _start -> __libc_start_main -> main
+
+   code that runs before main is easy to miss when reading only main

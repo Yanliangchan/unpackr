@@ -1,0 +1,17 @@
+---
+id: 021
+category: executable
+title: MZ and PE
+---
+   offset 0x00   4D 5A          "MZ"   DOS header magic
+   offset 0x3C   e_lfanew  ----------+
+                                     |
+   ...  DOS stub: "This program cannot be run in DOS mode."
+                                     |
+   e_lfanew ---> 50 45 00 00         v    "PE\0\0"   NT signature
+                 COFF file header         machine, section count, timestamp
+                 optional header          entry point, image base, directories
+                 section table
+
+   the DOS stub is dead weight kept for compatibility; its text is a toolchain
+   fingerprint, and its absence says the header was rewritten

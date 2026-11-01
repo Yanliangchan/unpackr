@@ -1,0 +1,14 @@
+---
+id: 039
+category: low-level
+title: Little endian
+---
+   the 32-bit value 0x12345678 at address 0x1000:
+
+        address   0x1000  0x1001  0x1002  0x1003
+        byte        78      56      34      12
+                    ^ least significant byte first
+
+   so the bytes  DE AD BE EF  read as the number 0xEFBEADDE
+
+   network byte order is the opposite (big endian), hence htons and htonl

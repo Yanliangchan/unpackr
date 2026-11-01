@@ -1,0 +1,17 @@
+---
+id: 026
+category: reverse
+title: System V AMD64 calls
+---
+   call f(a, b, c, d, e, g, h)
+
+   rdi = a   rsi = b   rdx = c   rcx = d   r8 = e   r9 = g      six in registers
+   [rsp+8] = h                                                  then the stack
+   rax = result      xmm0-xmm7 carry floating-point arguments
+
+   system calls use almost the same registers, with one change:
+
+      syscall number in rax
+      arguments in rdi rsi rdx r10 r8 r9       (r10 replaces rcx)
+
+   callee-saved: rbx rbp r12 r13 r14 r15       red zone: 128 bytes below rsp

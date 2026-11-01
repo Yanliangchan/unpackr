@@ -1,0 +1,15 @@
+---
+id: 056
+category: compiler
+title: Tail call
+---
+   int f(int x) { return g(x + 1); }
+
+   naive                      optimised
+
+   f:  add edi, 1             f:  add edi, 1
+       call g                     jmp  g          ; g returns straight to
+       ret                                        ; f's caller
+
+   the call and its return address are gone, so a backtrace has no frame
+   for f and a disassembly shows a jump out of a function

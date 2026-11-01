@@ -1,0 +1,21 @@
+---
+id: 054
+category: compiler
+title: Source to process
+---
+   hello.c
+      |  preprocessor      #include, #define expanded
+      v
+   hello.i
+      |  compiler          C to assembly (this is where -O matters)
+      v
+   hello.s
+      |  assembler         text to machine code
+      v
+   hello.o                 object file: code, symbols, relocations
+      |  linker            joins objects and libraries, fixes addresses
+      v
+   a.out                   executable: ready for the loader
+
+   each stage can leave a fingerprint: compiler comment, linker version,
+   build path, symbol style

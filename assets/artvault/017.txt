@@ -1,0 +1,16 @@
+---
+id: 017
+category: executable
+title: Mach-O layout
+---
+   mach_header_64     magic 0xFEEDFACF, cputype, ncmds, sizeofcmds
+   load commands
+     LC_SEGMENT_64    __PAGEZERO   no access: a NULL dereference traps here
+     LC_SEGMENT_64    __TEXT       r-x   code, __cstring
+     LC_SEGMENT_64    __DATA       rw-   __got, __la_symbol_ptr
+     LC_SEGMENT_64    __LINKEDIT   r--   symbols, code signature
+     LC_MAIN          offset of the entry point
+     LC_LOAD_DYLIB    /usr/lib/libSystem.B.dylib
+   segment data ...
+
+   a universal ("fat") file wraps several of these, one per architecture

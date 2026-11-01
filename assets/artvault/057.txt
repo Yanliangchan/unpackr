@@ -1,0 +1,16 @@
+---
+id: 057
+category: humour
+title: Works on my machine
+---
+        +------------------------------------------+
+        |  Bug report #4821                        |
+        |                                          |
+        |  Steps to reproduce:                     |
+        |    1. open the program                   |
+        |    2. watch it crash                     |
+        |                                          |
+        |  Status: CANNOT REPRODUCE                |
+        |  Environment: my machine                 |
+        |  Resolution: ship my machine             |
+        +------------------------------------------+

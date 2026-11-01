@@ -1,0 +1,20 @@
+---
+id: 029
+category: reverse
+title: API hashing
+---
+   instead of the string "VirtualAlloc", the file stores a number:
+
+      hash = 0
+      for each byte c of an exported name:
+          hash = ror(hash, 13) + c
+
+      if hash == 0x91AFCA54:   ; the wanted function
+          use it
+
+   +--------------+      +--------------+      +-----------------+
+   | export names |----->| hash each    |----->| compare with a  |
+   | of a module  |      | one          |      | stored constant |
+   +--------------+      +--------------+      +-----------------+
+
+   no readable name in the file, so no string search finds it

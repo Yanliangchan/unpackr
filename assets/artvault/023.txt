@@ -1,0 +1,16 @@
+---
+id: 023
+category: executable
+title: Overlay
+---
+   |<------------- described by the section table ------------->|
+   +----------+----------+----------+----------+----------------+
+   | headers  | .text    | .rdata   | .data    |    OVERLAY     |
+   +----------+----------+----------+----------+----------------+
+                                      last section ends here ^
+
+   the loader ignores everything after the last section, but the program can
+   read its own file
+
+   legitimate: Authenticode signatures, installers, self-extracting archives
+   also seen:  droppers carrying an encrypted payload

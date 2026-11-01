@@ -1,0 +1,18 @@
+---
+id: 035
+category: crypto
+title: XOR without the key
+---
+   encrypt each byte with one key byte:   e = p ^ k
+
+   the key cancels between neighbours:
+
+      e1 ^ e2 = (p1 ^ k) ^ (p2 ^ k) = p1 ^ p2
+
+   so for "http" under any key:
+
+      'h' ^ 't' = 0x68 ^ 0x74 = 0x1C        key 0x5A:  0x32 ^ 0x2E = 0x1C
+                                            key 0x41:  0x29 ^ 0x35 = 0x1C
+
+   searching for the pattern of differences finds the text without
+   trying a single key

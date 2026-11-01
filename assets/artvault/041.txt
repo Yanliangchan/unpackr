@@ -1,0 +1,18 @@
+---
+id: 041
+category: low-level
+title: x86 flags
+---
+   RFLAGS                          set when
+
+   bit  0  CF  carry              unsigned overflow of the last operation
+   bit  2  PF  parity             low result byte has an even number of 1s
+   bit  4  AF  adjust             carry out of bit 3
+   bit  6  ZF  zero               result was zero      <-- je / jne
+   bit  7  SF  sign               result was negative  <-- js / jns
+   bit  8  TF  trap               single-step: one trap after each instruction
+   bit  9  IF  interrupt enable
+   bit 10  DF  direction          string instructions run downward
+   bit 11  OF  overflow           signed overflow       <-- jo, jg, jl
+
+   cmp a, b is sub without storing the answer: only the flags remain

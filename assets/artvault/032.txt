@@ -1,0 +1,19 @@
+---
+id: 032
+category: reverse
+title: Is a debugger attached?
+---
+   IsDebuggerPresent()  is just:
+
+      mov rax, gs:[0x60]        ; PEB
+      movzx eax, byte [rax+2]   ; PEB.BeingDebugged
+      ret
+
+   the same byte can be read without the call, so a hook on the API misses it
+
+   other cheap checks on the same structure:
+
+      PEB.NtGlobalFlag (x64 offset 0xBC)   0x70 when started under a debugger
+      CheckRemoteDebuggerPresent / NtQueryInformationProcess
+
+   analysts patch the byte; malware reads it twice

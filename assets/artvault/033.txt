@@ -1,0 +1,19 @@
+---
+id: 033
+category: reverse
+title: UPX in a PE
+---
+   unpacked                        packed with UPX
+
+   +----------+                    +----------+
+   | headers  |                    | headers  |
+   +----------+                    +----------+
+   | .text    |                    | UPX0     |  raw size 0, virtual size big
+   | .rdata   |                    +----------+  (room to decompress into)
+   | .data    |                    | UPX1     |  stub + compressed sections
+   +----------+                    +----------+
+   | .rsrc    |                    | UPX2     |  resources
+   +----------+                    +----------+
+
+   the section names are only labels; the empty-on-disk, large-in-memory
+   executable section is the shape that matters

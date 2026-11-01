@@ -1,0 +1,18 @@
+---
+id: 027
+category: reverse
+title: Switch as jump table
+---
+   switch (x) { case 0..5: ... default: ... }
+
+        cmp  eax, 5
+        ja   default            ; unsigned: also catches negative x
+        lea  rdx, [rip+table]
+        movsxd rax, [rdx+rax*4] ; load a signed 32-bit offset
+        add  rax, rdx
+        jmp  rax                ; one indirect jump, six targets
+
+   table:  .long case0-table, case1-table, ... case5-table
+
+   a disassembler that does not recognise this shows an indirect jump and
+   loses every block behind it

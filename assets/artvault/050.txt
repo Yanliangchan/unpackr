@@ -1,0 +1,17 @@
+---
+id: 050
+category: crypto
+title: RC4 in outline
+---
+   key schedule                       keystream
+   S = [0, 1, 2, ... 255]             i = j = 0
+   j = 0                              repeat:
+   for i in 0..255:                     i = (i + 1) mod 256
+       j = (j + S[i] + key[i mod n])    j = (j + S[i]) mod 256
+           mod 256                      swap S[i], S[j]
+       swap S[i], S[j]                  output S[(S[i] + S[j]) mod 256]
+
+   cipher = plaintext ^ keystream      (so the same code decrypts)
+
+   short, easy to write from memory, and now known to be biased: seen in
+   old malware precisely because it is small

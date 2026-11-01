@@ -1,0 +1,19 @@
+---
+id: 038
+category: reverse
+title: Stack strings
+---
+   no string in .rdata to find:
+
+      mov byte [rbp-0x10], 'c'
+      mov byte [rbp-0x0f], 'm'
+      mov byte [rbp-0x0e], 'd'
+      mov byte [rbp-0x0d], 0
+
+   or, 8 bytes at a time:
+
+      mov rax, 0x6578652e646d63    ; "cmd.exe" backwards, in 8-byte pieces
+      mov [rbp-0x20], rax
+
+   the text exists only while the function runs; a scan for printable runs
+   in the file sees none of it

@@ -1,0 +1,19 @@
+---
+id: 053
+category: compiler
+title: Name mangling
+---
+   source:    namespace foo { void bar(); }
+
+   symbol:    _ZN3foo3barEv
+               | || | || | |
+               | || | || | +-- v : takes no arguments (void)
+               | || | || +---- E : end of the nested name
+               | || | |+------ bar (3 characters)
+               | || | +------- 3 : length of the next name
+               | || +--------- foo
+               | |+----------- 3
+               | +------------ N : a nested name follows
+               +-------------- _Z : a mangled C++ name
+
+   c++filt turns it back into foo::bar()
