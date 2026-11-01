@@ -1,0 +1,23 @@
+---
+id: 080
+category: picture
+title: Pirate flag
+style: fire
+---
+      |
+      |+------------------------------------------------+
+      ||                                                |
+      ||                  .-"""""-.                     |
+      ||                 /  _   _  \                    |
+      ||                |  (_) (_)  |                   |
+      ||                 \    ^    /                    |
+      ||           _      '.|||||.'      _              |
+      ||          ( \______/     \______/ )             |
+      ||           \___    X-----X    ___/              |
+      ||               `--/       \--'                  |
+      ||                                                |
+      |+------------------------------------------------+
+      |
+      |    YARR! the strings be plundered, the sections be sacked,
+      |    and not one byte of the loot was ever executed.
+      |

@@ -30,7 +30,7 @@ executables on Linux. Samples are never executed.
   with Landlock, seccomp-bpf, `no_new_privs` and resource limits; `unpackr doctor`
   shows what the current kernel provides and proves it by trying forbidden actions
 - JSON reports, batch analysis of directories with bounded concurrency
-- ArtVault startup banners (75, original, in eight categories, coloured with gradients that match the terminal's colour depth) with custom artwork support
+- ArtVault startup banners (85, original, in eight categories, coloured with gradients that match the terminal's colour depth) with custom artwork support
 - Findings carry a class (observation / inference / hypothesis), an ordinal
   confidence with its reason, and references to evidence
 

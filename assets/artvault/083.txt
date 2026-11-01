@@ -1,0 +1,26 @@
+---
+id: 083
+category: picture
+title: TLS callbacks run first
+style: sunset
+---
+                  .-----------------.
+                  |   .---------.   |
+                   \   \       /   /
+                    \   \     /   /
+                     \   \   /   /
+                      \   \ /   /
+                       \   X   /
+                        \ / \ /
+                         X   X
+                        / \ / \
+                       /   X   \
+                      /   / \   \
+                     /   /.:.\   \
+                    /   /:::::\   \
+                   /___/:::::::\___\
+                  |   '---------'   |
+                  '-----------------'
+
+      the entry point is not the first thing that runs.
+      TLS callbacks run before it, and sand always falls somewhere.

@@ -1,0 +1,24 @@
+---
+id: 079
+category: picture
+title: Unidentified format object
+style: toxic
+---
+                          _.-""""-._
+                       .-'  ______  '-.
+                      /   .'      '.   \
+                     |   /  o    o  \   |
+                 ____|__|    ----    |__|____
+            _.-'' ======================== ''-._
+           '-.__   o    o    o    o    o   __.-'
+                '--.______________________.--'
+                   /  /    |    |    \  \
+                  /__/     |    |     \__\
+                  :::::::::::::::::::::::::
+                  ::::::::: .beam. ::::::::
+                   :::::::::::::::::::::::
+                    :::::::  UFO  :::::::
+                      :::::::::::::::::
+
+      UFO: Unidentified Format Object.
+      unpackr says "unknown" instead of guessing, and stays honest.

@@ -1,0 +1,22 @@
+---
+id: 082
+category: picture
+title: Wake up, analyst
+style: matrix
+---
+   1 0 1 1 0 0 1   M Z 9 0 0 0   0 x 4 d 5 a   1 0 1 1 0
+   0 1 0 0 1 1 0   4 d 5 a 9 0   e 8 0 0 0 0   0 1 0 0 1
+   1 1 0 1 0 1 1   9 0 0 0 0 3   0 0 0 0 0 0   1 1 0 1 0
+   0 0 1 0 1 0 0   0 4 0 0 0 0   f f f f 0 0   0 0 1 0 1
+   1 0 1 1 0 0 1   b 8 0 0 0 0   0 0 0 0 0 0   1 0 1 1 0
+
+           +------------------------------------------+
+           |  Wake up, analyst...                     |
+           |  The Matrix has you.                     |
+           |  Follow the white rabbit (the entry      |
+           |  point), and mind the TLS callbacks.     |
+           +------------------------------------------+
+
+   0 1 0 0 1 1 0   5 0 4 5 0 0   4 c 0 1 0 3   0 1 0 0 1
+   1 1 0 1 0 1 1   0 0 0 0 0 0   0 0 0 0 0 0   1 1 0 1 0
+   0 0 1 0 1 0 0   e 0 0 0 0 e   0 b 0 1 0 b   0 0 1 0 1

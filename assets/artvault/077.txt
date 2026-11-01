@@ -1,0 +1,23 @@
+---
+id: 077
+category: picture
+title: You shall not pass
+style: plasma
+---
+                      .
+                     /:\
+                    /:::\          "YOU SHALL NOT PASS
+                   /:::::\          (the sandbox)"
+                  /::::::::\
+                 /_____/\___\            *
+                    ( o o )         *       .
+                 ,-./  v  \.-,   .     *
+                /   \_____/   \    .--.   *
+               / /|  /===\  |\ \  /    \
+              (_/ |  |   |  | \_)/ ,--. \
+                  |  |   |  |   | (  O )|   <- the staff of exec()
+                  |__|___|__|    \ `--' /
+                    /  |  \       `----'
+                   /___|___\
+
+      execve("/bin/sh") ........ DENIED by seccomp
