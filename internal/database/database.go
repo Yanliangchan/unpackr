@@ -1,35 +1,26 @@
 // Package database is UNPACKR's local memory: which files it has analysed,
 // what it found, and the cases they belong to. It stores hashes, reports and
-// notes, never the samples. The store is SQLite (pure Go, no server) in a
-// file only the owner can read.
+// notes, never the samples. The store is a small JSON index plus one
+// compressed report file per analysis, kept in a directory only the owner can
+// read. Writes are atomic and a lock file keeps two UNPACKR processes from
+// overwriting each other.
 package database
 
 import (
-	"bytes"
-	"compress/gzip"
-	"database/sql"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
-
-	_ "modernc.org/sqlite" // registers the "sqlite" driver
 
 	"github.com/Yanliangchan/unpackr/internal/comparison"
 	"github.com/Yanliangchan/unpackr/internal/config"
 	"github.com/Yanliangchan/unpackr/pkg/models"
 )
-
-//go:embed migrations/*.sql
-var migrations embed.FS
 
 // MaxStoredAnalyses is how many analyses are kept per sample.
 const MaxStoredAnalyses = 20
@@ -40,21 +31,26 @@ const maxReportBytes = 256 << 20
 // ErrNewerSchema means the database was written by a newer UNPACKR.
 var ErrNewerSchema = errors.New("the database was created by a newer version of UNPACKR")
 
-// DB is an open database.
+// ErrBusy means another UNPACKR process is using the database.
+var ErrBusy = errors.New("the database is in use by another UNPACKR process; try again in a moment")
+
+// DB is an open database. It is held open (and locked) until Close.
 type DB struct {
-	sql  *sql.DB
-	path string
+	path  string
+	ix    *Index
+	lock  *fileLock
+	dirty bool
 }
 
 // DefaultPath is where the database lives unless configured otherwise.
 func DefaultPath() string {
 	if d := config.DataDir(); d != "" {
-		return filepath.Join(d, "db.sqlite")
+		return filepath.Join(d, "db.json")
 	}
 	return ""
 }
 
-// Open creates (mode 0700 directory, 0600 file) and migrates the database.
+// Open creates (mode 0700 directory, 0600 files) and loads the database.
 func Open(path string) (*DB, error) {
 	if path == "" {
 		return nil, errors.New("no database path: set database_path or use_database: false")
@@ -62,22 +58,25 @@ func Open(path string) (*DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		f, cerr := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-		if cerr != nil {
-			return nil, cerr
-		}
-		_ = f.Close()
-	}
-	dsn := "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)"
-	s, err := sql.Open("sqlite", dsn)
+	lk, err := lockFile(path+".lock", lockWait)
 	if err != nil {
 		return nil, err
 	}
-	s.SetMaxOpenConns(1) // single writer; the CLI records after analysis finishes
-	d := &DB{sql: s, path: path}
-	if err := d.migrate(); err != nil {
-		_ = s.Close()
+	d := &DB{path: path, lock: lk}
+	if _, serr := os.Stat(path); os.IsNotExist(serr) {
+		d.ix, d.dirty = newIndex(), true
+		if err := d.Flush(); err != nil {
+			lk.unlock()
+			return nil, err
+		}
+		return d, nil
+	}
+	if err := d.load(); err != nil {
+		lk.unlock()
+		return nil, err
+	}
+	if err := d.Flush(); err != nil { // an empty file becomes a valid index
+		lk.unlock()
 		return nil, err
 	}
 	return d, nil
@@ -86,135 +85,66 @@ func Open(path string) (*DB, error) {
 // Path returns the database file.
 func (d *DB) Path() string { return d.path }
 
-// Close closes the database.
-func (d *DB) Close() error { return d.sql.Close() }
-
-func (d *DB) migrate() error {
-	var version int
-	if err := d.sql.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
-		return err
+// Close writes pending changes and releases the lock.
+func (d *DB) Close() error {
+	if d.lock == nil {
+		return nil
 	}
-	ents, err := migrations.ReadDir("migrations")
-	if err != nil {
-		return err
-	}
-	var files []string
-	for _, e := range ents {
-		files = append(files, e.Name())
-	}
-	sort.Strings(files)
-	if version > len(files) {
-		return fmt.Errorf("%w (schema %d, this build knows %d)", ErrNewerSchema, version, len(files))
-	}
-	for i := version; i < len(files); i++ {
-		b, err := migrations.ReadFile("migrations/" + files[i])
-		if err != nil {
-			return err
-		}
-		tx, err := d.sql.Begin()
-		if err != nil {
-			return err
-		}
-		if _, err := tx.Exec(string(b)); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("migration %s: %w", files[i], err)
-		}
-		if _, err := tx.Exec("PRAGMA user_version = " + strconv.Itoa(i+1)); err != nil {
-			_ = tx.Rollback()
-			return err
-		}
-		if err := tx.Commit(); err != nil {
-			return err
-		}
-	}
-	return nil
+	err := d.Flush()
+	d.lock.unlock()
+	d.lock = nil
+	return err
 }
 
 func now() string { return time.Now().UTC().Format(time.RFC3339) }
-
-func gz(b []byte) ([]byte, error) {
-	var buf bytes.Buffer
-	w := gzip.NewWriter(&buf)
-	if _, err := w.Write(b); err != nil {
-		return nil, err
-	}
-	if err := w.Close(); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-func gunzip(b []byte) ([]byte, error) {
-	r, err := gzip.NewReader(bytes.NewReader(b))
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close() //nolint:errcheck // in-memory reader
-	out, err := io.ReadAll(io.LimitReader(r, maxReportBytes+1))
-	if err != nil {
-		return nil, err
-	}
-	if len(out) > maxReportBytes {
-		return nil, errors.New("stored report is too large")
-	}
-	return out, nil
-}
 
 // Lookup returns what is remembered about sha256, or nil if the file is new.
 // The comparison with the previous analysis needs the current report, so it
 // is filled in by Annotate.
 func (d *DB) Lookup(sha string) (*models.KnownSample, error) {
-	var k models.KnownSample
-	err := d.sql.QueryRow("SELECT first_seen, last_seen, times_seen FROM samples WHERE sha256 = ?", sha).Scan(&k.FirstSeen, &k.LastSeen, &k.TimesSeen)
-	if errors.Is(err, sql.ErrNoRows) {
+	s := d.ix.Samples[sha]
+	if s == nil {
 		return nil, nil
 	}
-	if err != nil {
-		return nil, err
-	}
-	if err := d.sql.QueryRow("SELECT count(*) FROM analyses WHERE sha256 = ?", sha).Scan(&k.Analyses); err != nil {
-		return nil, err
-	}
-	var p models.PreviousAnalysis
-	err = d.sql.QueryRow(`SELECT analysed_at, tool_version, profile, packing_state, packing_family, language, compiler, findings, high, medium
-		FROM analyses WHERE sha256 = ? ORDER BY id DESC LIMIT 1`, sha).
-		Scan(&p.At, &p.ToolVersion, &p.Profile, &p.PackingState, &p.PackingFamily, &p.Language, &p.Compiler, &p.Findings, &p.High, &p.Medium)
-	if err == nil {
-		k.Last = &p
+	k := models.KnownSample{FirstSeen: s.FirstSeen, LastSeen: s.LastSeen, TimesSeen: s.TimesSeen}
+	as := d.ix.Analyses[sha]
+	k.Analyses = len(as)
+	if n := len(as); n > 0 {
+		a := as[n-1]
+		k.Last = &models.PreviousAnalysis{At: a.At, ToolVersion: a.ToolVersion, Profile: a.Profile, PackingState: a.PackingState,
+			PackingFamily: a.PackingFamily, Language: a.Language, Compiler: a.Compiler, Findings: a.Findings, High: a.High, Medium: a.Medium}
 	}
 	k.Cases = []string{}
-	rows, err := d.sql.Query("SELECT c.name FROM cases c JOIN case_samples cs ON cs.case_id = c.id WHERE cs.sha256 = ? ORDER BY c.name", sha)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close() //nolint:errcheck // read-only
-	for rows.Next() {
-		var n string
-		if err := rows.Scan(&n); err != nil {
-			return nil, err
+	for _, c := range d.ix.Cases {
+		for _, l := range c.Samples {
+			if l.SHA256 == sha {
+				k.Cases = append(k.Cases, c.Name)
+				break
+			}
 		}
-		k.Cases = append(k.Cases, n)
 	}
+	sort.Strings(k.Cases)
 	k.Derived = []string{}
-	r2, err := d.sql.Query("SELECT child FROM edges WHERE parent = ? ORDER BY child", sha)
-	if err != nil {
-		return nil, err
-	}
-	defer r2.Close() //nolint:errcheck // read-only
-	for r2.Next() {
-		var c string
-		if err := r2.Scan(&c); err != nil {
-			return nil, err
+	for _, e := range d.ix.Edges {
+		if e.Parent == sha {
+			k.Derived = append(k.Derived, e.Child)
 		}
-		k.Derived = append(k.Derived, c)
 	}
-	return &k, rows.Err()
+	sort.Strings(k.Derived)
+	return &k, nil
 }
 
 // LoadReport returns the most recent stored report for sha256.
 func (d *DB) LoadReport(sha string) (*models.Report, error) {
-	var blob []byte
-	err := d.sql.QueryRow("SELECT report_gz FROM analyses WHERE sha256 = ? ORDER BY id DESC LIMIT 1", sha).Scan(&blob)
+	as := d.ix.Analyses[sha]
+	if len(as) == 0 {
+		return nil, ErrNotFound
+	}
+	p, err := d.reportPath(sha, as[len(as)-1].ID)
+	if err != nil {
+		return nil, err
+	}
+	blob, err := os.ReadFile(p) //nolint:gosec // path built from a validated SHA-256 and a numeric id
 	if err != nil {
 		return nil, err
 	}
@@ -258,24 +188,17 @@ func hypName(hs []models.Hypothesis) string {
 // Record stores the analysis (and, recursively, any unpacked layers) and
 // refreshes the sample's bookkeeping. Samples are never stored.
 func (d *DB) Record(rep *models.Report) error {
-	tx, err := d.sql.Begin()
-	if err != nil {
+	if err := d.record(rep, nil); err != nil {
 		return err
 	}
-	if err := d.record(tx, rep, nil); err != nil {
-		_ = tx.Rollback()
-		return err
-	}
-	return tx.Commit()
+	d.dirty = true
+	return nil
 }
 
-func (d *DB) record(tx *sql.Tx, rep *models.Report, parent *models.Artifact) error {
+func (d *DB) record(rep *models.Report, parent *models.Artifact) error {
 	h, at := rep.File.Hashes, now()
-	_, err := tx.Exec(`INSERT INTO samples(sha256, md5, sha1, size, last_name, first_seen, last_seen, times_seen) VALUES (?,?,?,?,?,?,?,1)
-		ON CONFLICT(sha256) DO UPDATE SET last_name = excluded.last_name, last_seen = excluded.last_seen, times_seen = times_seen + 1`,
-		h.SHA256, h.MD5, h.SHA1, rep.File.Size, rep.File.Name, at, at)
-	if err != nil {
-		return err
+	if !shaRe.MatchString(h.SHA256) {
+		return fmt.Errorf("refusing to record a file without a valid SHA-256 (%q)", h.SHA256)
 	}
 	stored := *rep
 	stored.Known = nil // the memory is recomputed on read
@@ -307,42 +230,81 @@ func (d *DB) record(tx *sql.Tx, rep *models.Report, parent *models.Artifact) err
 			med++
 		}
 	}
-	if _, err := tx.Exec(`INSERT INTO analyses(sha256, analysed_at, tool_version, profile, format, architecture, packing_state, packing_family, language, compiler, findings, high, medium, report_gz)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, h.SHA256, at, rep.Tool.Version, rep.Profile, fmtName, arch, pstate, pfam, lang, comp, len(rep.Findings), high, med, blob); err != nil {
+
+	id := d.ix.NextAnalysis
+	// The report file goes first: a crash before the index is saved leaves an
+	// unreferenced file, never an index entry without its report.
+	if err := d.writeReport(h.SHA256, id, blob); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM analyses WHERE sha256 = ? AND id NOT IN (SELECT id FROM analyses WHERE sha256 = ? ORDER BY id DESC LIMIT ?)`, h.SHA256, h.SHA256, MaxStoredAnalyses); err != nil {
-		return err
+	d.ix.NextAnalysis++
+
+	if s := d.ix.Samples[h.SHA256]; s != nil {
+		s.LastName, s.LastSeen = rep.File.Name, at
+		s.TimesSeen++
+	} else {
+		d.ix.Samples[h.SHA256] = &Sample{SHA256: h.SHA256, MD5: h.MD5, SHA1: h.SHA1, Size: rep.File.Size, LastName: rep.File.Name, FirstSeen: at, LastSeen: at, TimesSeen: 1}
 	}
+	as := append(d.ix.Analyses[h.SHA256], &Analysis{ID: id, SHA256: h.SHA256, At: at, ToolVersion: rep.Tool.Version, Profile: rep.Profile,
+		Format: fmtName, Arch: arch, PackingState: pstate, PackingFamily: pfam, Language: lang, Compiler: comp,
+		Findings: len(rep.Findings), High: high, Medium: med, Bytes: int64(len(blob))})
+	for len(as) > MaxStoredAnalyses {
+		d.removeReport(h.SHA256, as[0].ID)
+		as = as[1:]
+	}
+	d.ix.Analyses[h.SHA256] = as
+
 	// Features are replaced wholesale so removed indicators do not linger.
-	if _, err := tx.Exec("DELETE FROM features WHERE sha256 = ?", h.SHA256); err != nil {
-		return err
-	}
+	seen := map[[2]string]bool{}
+	var feats [][2]string
 	for _, f := range Features(rep) {
-		if _, err := tx.Exec("INSERT OR IGNORE INTO features(sha256, kind, value) VALUES (?,?,?)", h.SHA256, f[0], f[1]); err != nil {
-			return err
+		if !seen[f] {
+			seen[f] = true
+			feats = append(feats, f)
 		}
 	}
-	if parent != nil {
-		if _, err := tx.Exec("INSERT OR REPLACE INTO edges(parent, child, kind, tool) VALUES (?,?,?,?)", parent.ParentSHA256, h.SHA256, parent.Kind, parent.Tool+" "+parent.ToolVersion); err != nil {
-			return err
+	d.ix.Features[h.SHA256] = feats
+
+	if parent != nil && shaRe.MatchString(parent.ParentSHA256) {
+		e := Edge{Parent: parent.ParentSHA256, Child: h.SHA256, Kind: parent.Kind, Tool: parent.Tool + " " + parent.ToolVersion}
+		replaced := false
+		for i, old := range d.ix.Edges {
+			if old.Parent == e.Parent && old.Child == e.Child && old.Kind == e.Kind {
+				d.ix.Edges[i], replaced = e, true
+				break
+			}
+		}
+		if !replaced {
+			d.ix.Edges = append(d.ix.Edges, e)
 		}
 	}
 	// Cases that contain this sample learn that it was analysed again.
 	detail := fmt.Sprintf("analysed with UNPACKR %s (%s): packing %s", rep.Tool.Version, rep.Profile, orDash(pstate))
-	if _, err := tx.Exec(`INSERT INTO timeline(case_id, at, kind, sha256, detail) SELECT case_id, ?, 'analysed', ?, ? FROM case_samples WHERE sha256 = ?`, at, h.SHA256, detail, h.SHA256); err != nil {
-		return err
+	for _, c := range d.ix.Cases {
+		for _, l := range c.Samples {
+			if l.SHA256 == h.SHA256 {
+				d.AddEvent(c.ID, at, "analysed", h.SHA256, detail)
+				break
+			}
+		}
 	}
 	for i := range rep.Artifacts {
 		a := &rep.Artifacts[i]
 		if a.Report == nil {
 			continue
 		}
-		if err := d.record(tx, a.Report, a); err != nil {
+		if err := d.record(a.Report, a); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// AddEvent appends a case timeline entry. The caller flushes or closes.
+func (d *DB) AddEvent(caseID int64, at, kind, sha, detail string) {
+	d.ix.Timeline = append(d.ix.Timeline, Event{ID: d.ix.NextEvent, CaseID: caseID, At: at, Kind: kind, SHA256: sha, Detail: detail})
+	d.ix.NextEvent++
+	d.dirty = true
 }
 
 func orDash(s string) string {
@@ -422,17 +384,22 @@ type Stats struct {
 
 // Stats counts what is stored.
 func (d *DB) Stats() (Stats, error) {
-	s := Stats{Path: d.path}
-	for q, dst := range map[string]*int{
-		"SELECT count(*) FROM samples": &s.Samples, "SELECT count(*) FROM analyses": &s.Analyses,
-		"SELECT count(*) FROM cases": &s.Cases, "SELECT count(*) FROM features WHERE kind LIKE 'indicator:%'": &s.Indicators,
-	} {
-		if err := d.sql.QueryRow(q).Scan(dst); err != nil {
-			return s, err
+	s := Stats{Path: d.path, Samples: len(d.ix.Samples), Cases: len(d.ix.Cases)}
+	for _, as := range d.ix.Analyses {
+		s.Analyses += len(as)
+		for _, a := range as {
+			s.Bytes += a.Bytes
+		}
+	}
+	for _, fs := range d.ix.Features {
+		for _, f := range fs {
+			if strings.HasPrefix(f[0], "indicator:") {
+				s.Indicators++
+			}
 		}
 	}
 	if st, err := os.Stat(d.path); err == nil {
-		s.Bytes = st.Size()
+		s.Bytes += st.Size()
 	}
 	return s, nil
 }
@@ -443,63 +410,99 @@ type SampleRef struct {
 	TimesSeen                                          int
 }
 
+// maxFindResults bounds a search.
+const maxFindResults = 200
+
 // Find returns samples carrying a pivot value. kind "ioc" searches every
 // indicator type; "hash" matches a SHA-256 prefix.
 func (d *DB) Find(kind, value string) ([]SampleRef, error) {
-	var rows *sql.Rows
-	var err error
-	base := `SELECT s.sha256, s.last_name, s.first_seen, s.last_seen, s.times_seen,
-		COALESCE((SELECT format FROM analyses a WHERE a.sha256 = s.sha256 ORDER BY id DESC LIMIT 1), ''),
-		COALESCE((SELECT packing_state FROM analyses a WHERE a.sha256 = s.sha256 ORDER BY id DESC LIMIT 1), '')
-		FROM samples s `
+	var match func(sha string) bool
+	hasFeature := func(sha string, ok func(kind, val string) bool) bool {
+		for _, f := range d.ix.Features[sha] {
+			if ok(f[0], f[1]) {
+				return true
+			}
+		}
+		return false
+	}
 	switch kind {
 	case "hash":
 		if len(value) < 6 || strings.ContainsAny(value, "%_") {
 			return nil, errors.New("give at least 6 hex characters of a SHA-256")
 		}
-		rows, err = d.sql.Query(base+"WHERE s.sha256 LIKE ? ESCAPE '\\' ORDER BY s.last_seen DESC LIMIT 200", strings.ToLower(value)+"%")
+		prefix := strings.ToLower(value)
+		match = func(sha string) bool { return strings.HasPrefix(sha, prefix) }
 	case "ioc":
-		rows, err = d.sql.Query(base+"WHERE s.sha256 IN (SELECT sha256 FROM features WHERE (kind LIKE 'indicator:%' AND value = ?) OR (kind = 'host' AND value = ?)) ORDER BY s.last_seen DESC LIMIT 200", value, strings.ToLower(value))
+		lower := strings.ToLower(value)
+		match = func(sha string) bool {
+			return hasFeature(sha, func(k, v string) bool {
+				return (strings.HasPrefix(k, "indicator:") && v == value) || (k == "host" && v == lower)
+			})
+		}
 	default:
-		rows, err = d.sql.Query(base+"WHERE s.sha256 IN (SELECT sha256 FROM features WHERE kind = ? AND value = ?) ORDER BY s.last_seen DESC LIMIT 200", kind, value)
+		match = func(sha string) bool {
+			return hasFeature(sha, func(k, v string) bool { return k == kind && v == value })
+		}
 	}
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close() //nolint:errcheck // read-only
 	var out []SampleRef
-	for rows.Next() {
-		var r SampleRef
-		if err := rows.Scan(&r.SHA256, &r.Name, &r.FirstSeen, &r.LastSeen, &r.TimesSeen, &r.Format, &r.Packing); err != nil {
-			return nil, err
+	for sha, s := range d.ix.Samples {
+		if !match(sha) {
+			continue
+		}
+		r := SampleRef{SHA256: sha, Name: s.LastName, FirstSeen: s.FirstSeen, LastSeen: s.LastSeen, TimesSeen: s.TimesSeen}
+		if as := d.ix.Analyses[sha]; len(as) > 0 {
+			r.Format, r.Packing = as[len(as)-1].Format, as[len(as)-1].PackingState
 		}
 		out = append(out, r)
 	}
-	return out, rows.Err()
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].LastSeen != out[j].LastSeen {
+			return out[i].LastSeen > out[j].LastSeen
+		}
+		return out[i].SHA256 < out[j].SHA256
+	})
+	if len(out) > maxFindResults {
+		out = out[:maxFindResults]
+	}
+	return out, nil
 }
 
 // Forget removes a sample and everything derived from it (analyses, features,
 // case links). Notes attached to a case stay; their sample reference is cleared.
 func (d *DB) Forget(sha string) (bool, error) {
-	tx, err := d.sql.Begin()
-	if err != nil {
-		return false, err
+	if d.ix.Samples[sha] == nil {
+		return false, nil
 	}
-	if _, err := tx.Exec("UPDATE notes SET sha256 = NULL WHERE sha256 = ?", sha); err != nil {
-		_ = tx.Rollback()
-		return false, err
+	for _, a := range d.ix.Analyses[sha] {
+		d.removeReport(sha, a.ID)
 	}
-	res, err := tx.Exec("DELETE FROM samples WHERE sha256 = ?", sha)
-	if err != nil {
-		_ = tx.Rollback()
-		return false, err
+	delete(d.ix.Samples, sha)
+	delete(d.ix.Analyses, sha)
+	delete(d.ix.Features, sha)
+	edges := d.ix.Edges[:0]
+	for _, e := range d.ix.Edges {
+		if e.Parent != sha && e.Child != sha {
+			edges = append(edges, e)
+		}
 	}
-	n, _ := res.RowsAffected()
-	return n > 0, tx.Commit()
+	d.ix.Edges = edges
+	for _, c := range d.ix.Cases {
+		links := c.Samples[:0]
+		for _, l := range c.Samples {
+			if l.SHA256 != sha {
+				links = append(links, l)
+			}
+		}
+		c.Samples = links
+	}
+	for i := range d.ix.Notes {
+		if d.ix.Notes[i].SHA256 == sha {
+			d.ix.Notes[i].SHA256 = ""
+		}
+	}
+	d.dirty = true
+	return true, d.Flush()
 }
-
-// SQL exposes the handle to the cases package.
-func (d *DB) SQL() *sql.DB { return d.sql }
 
 // Now is the timestamp format used throughout the database.
 func Now() string { return now() }

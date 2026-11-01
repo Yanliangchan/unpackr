@@ -133,7 +133,7 @@ with an apostrophe so spreadsheets do not execute them.
 
 ## Local database and cases
 
-- Location: `$XDG_DATA_HOME/unpackr/db.sqlite` (default `~/.local/share/unpackr/`),
+- Location: `$XDG_DATA_HOME/unpackr/db.json` (default `~/.local/share/unpackr/`),
   directory 0700, file 0600. Config: `use_database` (default true) and
   `database_path`.
 - Stores, per SHA-256: hashes, size, last file name, first/last seen, up to 20

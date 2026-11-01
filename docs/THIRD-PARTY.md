@@ -5,7 +5,7 @@ in `go.mod`. Run `go list -m all` for the exact versions of a given build.
 Licences were checked during verification (see `docs/VERIFICATION.md`); the
 authoritative text for each module is in its upstream repository.
 
-Direct dependencies include: spf13/cobra, gopkg.in/yaml.v3, modernc.org/sqlite,
+Direct dependencies include: spf13/cobra, gopkg.in/yaml.v3,
 saferwall/pe, glaslos/ssdeep, glaslos/tlsh, landlock-lsm/go-landlock and
 elastic/go-seccomp-bpf.
 

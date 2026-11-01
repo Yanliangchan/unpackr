@@ -12,7 +12,7 @@ import (
 
 func db(t *testing.T) *database.DB {
 	t.Helper()
-	d, err := database.Open(filepath.Join(t.TempDir(), "db.sqlite"))
+	d, err := database.Open(filepath.Join(t.TempDir(), "db.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
