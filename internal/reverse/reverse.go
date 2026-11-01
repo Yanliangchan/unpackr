@@ -103,7 +103,11 @@ func script(flags []string, token string) string {
 	var b strings.Builder
 	// The sandbox setting goes on after the sample is open: set earlier, radare2
 	// cannot open the file at all.
-	b.WriteString("e cfg.sandbox=true;aa;" + m("I") + ";iIj;" + m("E") + ";iej;" + m("F") + ";afl")
+	// "aa" alone follows only the entry point and named symbols: on a stripped
+	// program it finds a handful of functions (2 in a 656 KB sample where "aa;aac"
+	// finds 1,092). "aac" adds functions reached by calls. "aaa" finds the same
+	// functions and is several times slower.
+	b.WriteString("e cfg.sandbox=true;aa;aac;" + m("I") + ";iIj;" + m("E") + ";iej;" + m("F") + ";afl")
 	for i, f := range flags {
 		fmt.Fprintf(&b, ";%s;axtj %s", m(fmt.Sprintf("X%d", i)), f)
 	}

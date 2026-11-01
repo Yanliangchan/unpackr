@@ -117,7 +117,7 @@ func TestUnsafeImportNamesNeverReachTheCommandScript(t *testing.T) {
 	}
 	// Whatever the names, the script contains only the fixed commands and flags.
 	s := script([]string{"sym.imp.socket", "sym.imp.KERNEL32.dll_VirtualAlloc"}, "abcd1234abcd1234")
-	if strings.Count(s, ";") != 1+6+2*2 || strings.ContainsAny(s, "!|`\n&<>") {
+	if strings.Count(s, ";") != 1+1+6+2*2 || strings.ContainsAny(s, "!|`\n&<>") {
 		t.Errorf("unexpected script: %s", s)
 	}
 }
