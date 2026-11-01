@@ -28,6 +28,9 @@ what could not be looked for.
 
 ## Not recovered (so absence of a result is not a clean result)
 
+* Stack-built strings on architectures other than x86 and x86-64 (ARM, AArch64 and
+  others): the recogniser matches x86 instruction encodings. Encoded strings
+  kept in data are architecture-independent and are still found.
 * Multi-byte or rolling keys, RC4, AES, custom ciphers, UTF-16 encodings.
 * Strings assembled through computation or loops, and any string that holds
   none of the markers (the search finds known text, not arbitrary text).
