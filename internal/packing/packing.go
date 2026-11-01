@@ -76,6 +76,7 @@ func Assess(in *analysis.Input) models.PackingAssessment {
 	c.entropy()
 	c.dotnet()
 	c.decoded()
+	c.codePatterns()
 
 	out.Signals = append(out.Signals, c.signals...)
 	return c.verdict(out)
@@ -224,6 +225,35 @@ func (c *collector) entropy() {
 	}
 }
 
+// codePatterns turns the deep profile's instruction idioms into signals. They
+// are heuristics over short windows of linear disassembly, so each is at most
+// moderate and none names a tool.
+func (c *collector) codePatterns() {
+	d := c.in.Disasm
+	if d == nil || d.Skipped != "" {
+		return
+	}
+	for _, spec := range []struct {
+		kind, id, family, detail string
+	}{
+		{"peb-ldr-walk", "pack.code.peb-walk", "disasm:peb", "code reads the process environment block and walks its loaded-module list, finding modules without importing them"},
+		{"api-hash-ror13", "pack.code.api-hash", "disasm:hash", "code contains the ror-13 name-hashing loop used to find API functions by hash"},
+		{"state-dispatcher", "pack.code.flattening", "disasm:flatten", "code contains a dispatcher that compares many of the same large constants it stores, the shape of control-flow flattening"},
+	} {
+		n := d.Counts[spec.kind]
+		if n == 0 {
+			continue
+		}
+		var evs []string
+		for _, st := range d.Sites {
+			if st.Kind == spec.kind && st.Evidence != "" && len(evs) < 5 {
+				evs = append(evs, st.Evidence)
+			}
+		}
+		c.add(spec.id, fmt.Sprintf("%s (%d place(s))", spec.detail, n), "moderate", spec.family, evs...)
+	}
+}
+
 // decoded turns recovered strings into signals. A string that decodes to a
 // known marker under a single-byte key is direct evidence that content is
 // kept encoded; a stack string is only counted when it contains such a marker,
@@ -338,6 +368,21 @@ func (c *collector) verdict(out models.PackingAssessment) models.PackingAssessme
 			strong = append(strong, s)
 		}
 	}
+	// Recovered strings and code idioms say content is concealed; they are not
+	// evidence that a packer compressed or encrypted the program, so the packed
+	// verdicts are judged on the other signals only.
+	var packSigs []models.Signal
+	packFamilies, packNonEntropy := map[string]bool{}, map[string]bool{}
+	for _, sg := range sigs {
+		if sg.Family == "encoding" || strings.HasPrefix(sg.Family, "disasm:") {
+			continue
+		}
+		packSigs = append(packSigs, sg)
+		packFamilies[sg.Family] = true
+		if sg.Family != "entropy" {
+			packNonEntropy[sg.Family] = true
+		}
+	}
 	best, bestN := "", 0
 	for n, k := range c.packer {
 		if k > bestN || (k == bestN && n < best) {
@@ -351,14 +396,18 @@ func (c *collector) verdict(out models.PackingAssessment) models.PackingAssessme
 	case len(strong) > 0:
 		out.State, out.Family = models.PackLikely, best
 		out.Notes = append(out.Notes, "an exact signature was found but nothing independent corroborates it")
-	case len(families) >= 2 && len(nonEntropy) >= 1 && hasAtLeast(sigs, "moderate", 2):
+	case len(packFamilies) >= 2 && len(packNonEntropy) >= 1 && hasAtLeast(packSigs, "moderate", 2):
 		out.State, out.Family = models.PackLikely, best
-	case families["encoding"]:
+	case families["encoding"] || hasPrefixFamily(families, "disasm:"):
 		// Concealed content was recovered, but nothing says the program body is
 		// packed. The state says what was found and no more.
 		out.State = models.PackObfuscated
 		conf = models.ConfidenceMedium
 		why = "stack-built text matched a known marker; assembled by byte pattern rather than disassembly"
+		if !families["encoding"] {
+			conf = models.ConfidenceLow
+			why = "instruction patterns typical of API hashing, module walking or flattening were found by linear disassembly; these are heuristics"
+		}
 		for _, d := range c.in.Decoded {
 			if d.Method != "stack" {
 				conf = models.ConfidenceHigh
@@ -366,7 +415,12 @@ func (c *collector) verdict(out models.PackingAssessment) models.PackingAssessme
 				break
 			}
 		}
-		out.Notes = append(out.Notes, "text is kept in a form the plain string scan does not see; only single-byte XOR/ADD, base64-embedded executables and stack-built strings are recovered, so other content may still be hidden")
+		if families["encoding"] {
+			out.Notes = append(out.Notes, "text is kept in a form the plain string scan does not see; only single-byte XOR/ADD, base64-embedded executables and stack-built strings are recovered, so other content may still be hidden")
+		}
+		if hasPrefixFamily(families, "disasm:") {
+			out.Notes = append(out.Notes, "found by a bounded linear disassembly of the executable sections; idioms in code that was not reached, or obfuscation of other kinds, are not seen")
+		}
 	case len(sigs) > 0:
 		out.State = models.PackUnknown
 		out.Notes = append(out.Notes, "indicators exist but are not sufficient to call the file packed; entropy alone or a single structural oddity is never a verdict")
@@ -389,6 +443,15 @@ func (c *collector) verdict(out models.PackingAssessment) models.PackingAssessme
 	}
 	out.Confidence, out.Rationale = conf, why
 	return out
+}
+
+func hasPrefixFamily(fam map[string]bool, prefix string) bool {
+	for f := range fam {
+		if strings.HasPrefix(f, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // hasAtLeast counts signals of at least the given strength.

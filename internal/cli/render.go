@@ -326,6 +326,23 @@ func renderAnalysis(w io.Writer, r *models.Report, verbose bool, st terminal.Sty
 			}
 		}
 	}
+	if d := a.Disasm; d != nil {
+		switch {
+		case d.Skipped != "":
+			fmt.Fprintf(w, "  %-10s %s\n", "Code", st.Dim("pattern analysis skipped: "+safe(d.Skipped)))
+		case len(d.Sites) == 0:
+			fmt.Fprintf(w, "  %-10s %s\n", "Code", st.Dim(fmt.Sprintf("%d instructions examined in %s of code: none of the PEB-walk, API-hash or flattening patterns were found", d.Instructions, byteSize(d.Bytes))))
+		default:
+			fmt.Fprintf(w, "  %-10s %s\n", "Code", st.Dim(fmt.Sprintf("%d instructions examined in %s of code", d.Instructions, byteSize(d.Bytes))))
+			for i, s := range d.Sites {
+				if i == 8 {
+					fmt.Fprintf(w, "  %-10s … and %d more sites (see the report)\n", "", len(d.Sites)-i)
+					break
+				}
+				fmt.Fprintf(w, "  %-10s ⚙ 0x%x %s: %s\n", "", s.Offset, safe(s.Kind), safe(head(s.Detail, 100)))
+			}
+		}
+	}
 	for i, d := range a.Decoded {
 		if i == 8 {
 			fmt.Fprintf(w, "  %-10s … and %d more recovered strings (see the report)\n", "", len(a.Decoded)-i)
@@ -776,4 +793,14 @@ func renderDotNet(w io.Writer, dn *models.DotNet, verbose bool, st terminal.Styl
 		}
 		fmt.Fprintf(w, "  %-12s %s (%d bytes, %s, entropy %.2f)\n", "Resource", safe(clip(r.Name, 48)), r.Size, kind, r.Entropy)
 	}
+}
+
+func byteSize(n int) string {
+	switch {
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
+	}
+	return fmt.Sprintf("%d bytes", n)
 }

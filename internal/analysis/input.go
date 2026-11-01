@@ -25,6 +25,8 @@ type Input struct {
 	// Decoded are strings recovered from encoded forms; each already has an
 	// evidence record (DecodedString.Evidence).
 	Decoded []models.DecodedString
+	// Disasm holds the code-pattern results of the deep profile, or nil.
+	Disasm *models.Disassembly
 }
 
 // Sink collects evidence and hands out stable identifiers.

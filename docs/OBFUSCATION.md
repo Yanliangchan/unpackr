@@ -20,6 +20,31 @@ URL, address or domain, because compilers build ordinary constant text on the
 stack too. On 271 real system binaries (Go, C, C++) this produced no
 "obfuscated" verdict and no listed string.
 
+## Code patterns (`-d`)
+
+A bounded linear disassembly of the executable sections (x86 and x86-64 only,
+using golang.org/x/arch). Nothing is executed and no control-flow graph is built.
+
+| Pattern | What is matched | Strength |
+|---|---|---|
+| module walking | a read of the PEB through `fs:[0x30]` (32-bit) or `gs:[0x60]` (64-bit), then the loader-data and module-list offsets within the next 14 instructions | moderate |
+| API-name hashing | `ror 13` in a loop that loads a byte, accumulates with add/xor/sub and branches back to the load within 48 bytes (the widely copied form; other rotate loops are ordinary hash functions and are ignored) | moderate |
+| control-flow flattening | within a 4 KB window, at least 12 distinct large (at least 0x10000) constants that are both stored (`mov`) and compared (`cmp`), i.e. state values | moderate |
+
+Verification: hand-assembled byte sequences for each idiom and for near misses
+(PEB read without a walk, other segment offsets, rotate without a loop, a large
+`switch` with no matching stores); random data produces nothing; a sweep of 271
+real system binaries (77 MB of code) produced no site. Two thresholds were set
+from that sweep: ordinary code reached 6 shared constants by accident in four
+files, hence the minimum of 12, and generic rotate-and-add loops (69 sites in
+ordinary hashing code) are not reported.
+
+Limits: a small flattened function with fewer than 12 states is missed; hashing
+with another rotate amount, or hashing done with other instructions, is missed;
+nothing is tuned on real malware because none was available here. Patterns that
+need function recovery (opaque predicates, virtualised code) are not attempted.
+Results are heuristic, medium-confidence observations at most.
+
 ## State
 
 `obfuscated` means encoded text was recovered and no packer was identified. It

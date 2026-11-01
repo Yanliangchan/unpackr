@@ -184,3 +184,107 @@ func TestRealManagedAssemblyEndToEnd(t *testing.T) {
 		t.Errorf("decoded strings in a benign assembly: %+v", rep.Analysis.Decoded)
 	}
 }
+
+// shellcode-style module resolution: PEB, loader list, ror-13 name hash.
+func peResolverCode() []byte {
+	var c []byte
+	// 64-bit: mov rax, gs:[0x60] ; mov rax,[rax+0x18] ; mov rdx,[rax+0x20]
+	c = append(c, 0x65, 0x48, 0x8B, 0x04, 0x25, 0x60, 0, 0, 0, 0x48, 0x8B, 0x40, 0x18, 0x48, 0x8B, 0x50, 0x20)
+	// loop: lodsb ; ror edi,13 ; add edi,eax ; jne loop
+	c = append(c, 0x90, 0x90, 0xAC, 0xC1, 0xCF, 0x0D, 0x01, 0xC7, 0x75, 0xF8)
+	return c
+}
+
+func TestDeepProfileFindsCodePatterns(t *testing.T) {
+	path := write(t, "resolver.exe", fixtures.BuildPE(fixtures.PESpec{Code: peResolverCode(), Imports: map[string][]string{"KERNEL32.dll": {"ExitProcess"}}}))
+	deep := opts()
+	deep.Profile = ProfileDeep
+	rep, err := Analyze(context.Background(), path, deep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := rep.Analysis.Disasm
+	if d == nil || d.Counts["peb-ldr-walk"] != 1 || d.Counts["api-hash-ror13"] != 1 {
+		t.Fatalf("patterns not found: %+v", d)
+	}
+	if rep.Analysis.Packing.State != models.PackObfuscated {
+		t.Errorf("code patterns alone should give 'obfuscated', got %s (%s)", rep.Analysis.Packing.State, rep.Analysis.Packing.Rationale)
+	}
+	if rep.Analysis.Packing.Confidence == models.ConfidenceHigh {
+		t.Errorf("heuristics must not reach high confidence: %s", rep.Analysis.Packing.Confidence)
+	}
+	found := 0
+	for _, f := range rep.Findings {
+		if strings.HasPrefix(f.ID, "obfuscation.code.") {
+			found++
+			if f.Confidence == models.ConfidenceHigh || len(f.EvidenceID) == 0 {
+				t.Errorf("finding %s: %+v", f.ID, f)
+			}
+		}
+	}
+	if found != 2 {
+		t.Errorf("want 2 code-pattern findings, got %d", found)
+	}
+	for _, n := range rep.NotRun {
+		if strings.HasPrefix(n, "code-pattern-analysis") {
+			t.Errorf("the deep profile ran the stage; it must not be listed as not run: %s", n)
+		}
+	}
+
+	// The default profile does not run it, and says so.
+	info, err := Analyze(context.Background(), path, opts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Analysis.Disasm != nil {
+		t.Error("info profile must not disassemble")
+	}
+	var listed bool
+	for _, n := range info.NotRun {
+		listed = listed || n == NotRunCodePatterns
+	}
+	if !listed {
+		t.Errorf("not_run should list the skipped stage: %v", info.NotRun)
+	}
+}
+
+func TestDeepProfileOnOrdinaryCodeFindsNothing(t *testing.T) {
+	deep := opts()
+	deep.Profile = ProfileDeep
+	a := func(p string) *models.Analysis {
+		rep, err := Analyze(context.Background(), p, deep)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rep.Analysis
+	}
+	for name, p := range map[string]string{"clean C program": fixtures.CleanProgram(t), "Go program": fixtures.GoBinary(t, "linux", "amd64")} {
+		d := a(p).Disasm
+		if d == nil || d.Skipped != "" || d.Instructions == 0 {
+			t.Fatalf("%s: nothing examined: %+v", name, d)
+		}
+		if len(d.Sites) != 0 {
+			t.Errorf("%s: false positives: %+v", name, d.Sites)
+		}
+	}
+}
+
+func TestDeepProfileSkipsOtherArchitecturesVisibly(t *testing.T) {
+	arm := fixtures.BuildPE(fixtures.PESpec{Machine: 0xaa64, Code: []byte{0x1f, 0x20, 0x03, 0xd5}})
+	deep := opts()
+	deep.Profile = ProfileDeep
+	rep, err := Analyze(context.Background(), write(t, "arm.exe", arm), deep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := rep.Analysis.Disasm; d == nil || d.Skipped == "" {
+		t.Fatalf("an ARM image must be reported as skipped: %+v", d)
+	}
+	var listed bool
+	for _, n := range rep.NotRun {
+		listed = listed || strings.HasPrefix(n, "code-pattern-analysis: skipped")
+	}
+	if !listed {
+		t.Errorf("skip must appear in not_run: %v", rep.NotRun)
+	}
+}

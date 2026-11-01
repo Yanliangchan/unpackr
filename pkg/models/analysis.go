@@ -196,6 +196,7 @@ type Analysis struct {
 	Capabilities []Capability      `json:"capabilities"`
 	Anomalies    []Anomaly         `json:"anomalies"`
 	Decoded      []DecodedString   `json:"decoded_strings"`
+	Disasm       *Disassembly      `json:"disassembly,omitempty"`
 	Evidence     []Evidence        `json:"evidence"`
 	Yara         []YaraMatch       `json:"yara_matches"`
 	Engines      []EngineStatus    `json:"engines"`
@@ -229,4 +230,25 @@ type Similarity struct {
 	HasTLSH      bool                  `json:"has_tlsh"`
 	SSDeepScore  int                   `json:"ssdeep_score"`
 	HasSSDeep    bool                  `json:"has_ssdeep"`
+}
+
+// Disassembly summarises the bounded code-pattern pass of the deep profile.
+// It is a linear sweep over executable bytes, not a recovered program: it
+// finds instruction idioms, and every site is a heuristic observation.
+type Disassembly struct {
+	Arch         string         `json:"arch"`
+	Bytes        int            `json:"bytes_examined"`
+	Instructions int            `json:"instructions"`
+	Truncated    bool           `json:"truncated,omitempty"`
+	Skipped      string         `json:"skipped,omitempty"` // why nothing was examined
+	Counts       map[string]int `json:"counts"`
+	Sites        []DisasmSite   `json:"sites"`
+}
+
+// DisasmSite is one place where an idiom was seen.
+type DisasmSite struct {
+	Kind     string `json:"kind"` // peb-access | peb-ldr-walk | api-hash-ror13 | state-dispatcher
+	Offset   int64  `json:"file_offset"`
+	Detail   string `json:"detail"`
+	Evidence string `json:"evidence,omitempty"`
 }

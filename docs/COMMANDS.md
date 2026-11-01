@@ -38,7 +38,7 @@ A path may appear before or after flags. A file literally named `doctor`,
 | | `--require-sandbox` | works | Fail instead of analysing with reduced confinement |
 | | `--offline` | accepted | Always true; the build has no network code |
 | | `--no-banner`, `--banner SEL`, `--quiet`, `--no-color` | works | Presentation |
-| `-d` | `--deep` | **not implemented** | Exit 4 |
+| `-d` | `--deep` | works for x86/x86-64 | Everything `-i` does, plus a bounded linear disassembly of the executable sections that looks for three obfuscation idioms: PEB module walking, the ror-13 API-name hash loop and control-flow-flattening dispatchers. Other architectures are listed under `not_run` as skipped. See `docs/OBFUSCATION.md` |
 | `-u` | `--unpack` | works for UPX | Unpacks UPX-packed files with `upx -d` in a sandbox, validates, analyses and compares the result. Needs `upx` installed. Output goes to `<output-dir>/artifacts/` (default `./unpackr-out/artifacts/`) as `<sha256>.bin`, mode 0600. Other packers report `not-applicable` |
 | `-x` | `--extract` | works for PyInstaller | Extracts the bundle into `<output-dir>/artifacts/pyinstaller-<sha256 prefix>/` (default `./unpackr-out/`). Other files report `not-applicable` |
 | `-r` | `--reverse` | **not implemented** | Exit 4 |

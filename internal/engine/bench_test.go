@@ -24,7 +24,7 @@ func BenchmarkAnalyzeBytes(b *testing.B) {
 		b.Run(name, func(b *testing.B) {
 			b.SetBytes(int64(len(data)))
 			for i := 0; i < b.N; i++ {
-				analyzeBytes(data, "elf", nil, nil, skip)
+				analyzeBytes(data, "elf", nil, nil, analyzeOpts{skipFuzzy: skip})
 			}
 		})
 	}

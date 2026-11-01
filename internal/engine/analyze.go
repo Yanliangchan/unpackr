@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Yanliangchan/unpackr/internal/analysis"
@@ -14,6 +15,7 @@ import (
 	"github.com/Yanliangchan/unpackr/internal/capabilities"
 	"github.com/Yanliangchan/unpackr/internal/confidence"
 	"github.com/Yanliangchan/unpackr/internal/content"
+	"github.com/Yanliangchan/unpackr/internal/disasm"
 	"github.com/Yanliangchan/unpackr/internal/fingerprint"
 	"github.com/Yanliangchan/unpackr/internal/obfuscation"
 	"github.com/Yanliangchan/unpackr/internal/packing"
@@ -21,6 +23,9 @@ import (
 	"github.com/Yanliangchan/unpackr/internal/worker"
 	"github.com/Yanliangchan/unpackr/pkg/models"
 )
+
+// NotRunCodePatterns is reported unless the deep profile ran the disassembly pass.
+const NotRunCodePatterns = "code-pattern-analysis: not run; use -d for the bounded disassembly pass that looks for PEB module walking, API-name hash loops and control-flow flattening (x86 and x86-64)"
 
 // NotRunFuzzy is reported when the quick profile skipped similarity hashing.
 const NotRunFuzzy = "fuzzy-hashing: skipped by the quick profile (ssdeep, TLSH and the string sketch are empty, which does not mean the file is unique)"
@@ -36,6 +41,8 @@ type AnalyzeParams struct {
 	Yara   []models.YaraMatch `json:"yara,omitempty"`
 	// SkipFuzzy omits ssdeep, TLSH and the string sketch (quick profile).
 	SkipFuzzy bool `json:"skip_fuzzy,omitempty"`
+	// Deep runs the code-pattern (disassembly) pass.
+	Deep bool `json:"deep,omitempty"`
 }
 
 func init() {
@@ -52,16 +59,20 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		return analyzeBytes(data, p.Family, p.Binary, p.Yara, p.SkipFuzzy), nil
+		return analyzeBytes(data, p.Family, p.Binary, p.Yara, analyzeOpts{skipFuzzy: p.SkipFuzzy, deep: p.Deep}), nil
 	})
 }
 
 // RunAnalysis is the pure core of the analyze task.
 func RunAnalysis(data []byte, family string, bin *models.Binary, yaraMatches []models.YaraMatch) *models.Analysis {
-	return analyzeBytes(data, family, bin, yaraMatches, false)
+	return analyzeBytes(data, family, bin, yaraMatches, analyzeOpts{})
 }
 
-func analyzeBytes(data []byte, family string, bin *models.Binary, yaraMatches []models.YaraMatch, skipFuzzy bool) *models.Analysis {
+// analyzeOpts selects the optional parts of the analysis.
+type analyzeOpts struct{ skipFuzzy, deep bool }
+
+func analyzeBytes(data []byte, family string, bin *models.Binary, yaraMatches []models.YaraMatch, o analyzeOpts) *models.Analysis {
+	skipFuzzy := o.skipFuzzy
 	// Universal Mach-O: work on the first slice's section table for mapping.
 	view := bin
 	if view != nil && len(view.Slices) > 0 {
@@ -104,6 +115,11 @@ func analyzeBytes(data []byte, family string, bin *models.Binary, yaraMatches []
 		d.Evidence = sink.Add("decoded-string", d.Text, d.Offset, int64(d.Length), sectionOf(d.Offset), "obfuscation/"+d.Method, "decoded:"+d.Method)
 	}
 	in.Decoded = decoded
+	var dis *models.Disassembly
+	if o.deep {
+		dis = runDisasm(data, view, sink, sectionOf)
+		in.Disasm = dis
+	}
 
 	fp := fingerprint.Detect(in)
 	pk := packing.Assess(in)
@@ -140,6 +156,7 @@ func analyzeBytes(data []byte, family string, bin *models.Binary, yaraMatches []
 		Strings:      scan.Summarize(sectionOf),
 		Indicators:   mergeDecodedIndicators(content.ExtractIndicators(scan.Hits, sectionOf), decoded, sectionOf),
 		Decoded:      nonNilDecoded(decoded),
+		Disasm:       dis,
 		Fingerprint:  fp,
 		Packing:      pk,
 		Evidence:     sink.Evidence,
@@ -152,7 +169,7 @@ func analyzeBytes(data []byte, family string, bin *models.Binary, yaraMatches []
 func runAnalysis(ctx context.Context, f *os.File, size int64, rep *models.Report, family string, wo worker.Options, o Options) {
 	matches, eng := runYara(ctx, f, size, o)
 	start := time.Now()
-	res, err := worker.Run(ctx, TaskAnalyze, AnalyzeParams{Family: family, Binary: rep.Binary, Yara: matches, SkipFuzzy: o.Profile == ProfileQuick}, f, size, wo)
+	res, err := worker.Run(ctx, TaskAnalyze, AnalyzeParams{Family: family, Binary: rep.Binary, Yara: matches, SkipFuzzy: o.Profile == ProfileQuick, Deep: o.Profile == ProfileDeep}, f, size, wo)
 	run := models.ModuleRun{Name: "content-analysis", DurationMS: time.Since(start).Milliseconds()}
 	if res != nil {
 		sb := res.Sandbox
@@ -182,7 +199,66 @@ func runAnalysis(ctx context.Context, f *os.File, size int64, rep *models.Report
 	if o.Profile == ProfileQuick {
 		rep.NotRun = append(rep.NotRun, NotRunFuzzy)
 	}
+	switch {
+	case o.Profile != ProfileDeep:
+		rep.NotRun = append(rep.NotRun, NotRunCodePatterns)
+	case a.Disasm != nil && a.Disasm.Skipped != "":
+		rep.NotRun = append(rep.NotRun, "code-pattern-analysis: skipped: "+a.Disasm.Skipped)
+	}
 	rep.NotRun = withoutStages(rep.NotRun, "entropy-analysis", "string-extraction", "indicator-extraction", "language-and-compiler-identification", "packing-assessment", "capability-inference", "anomaly-detection")
+}
+
+// runDisasm sweeps the executable sections (or, without a section table, the
+// executable segments) of an x86 or x86-64 image. Other architectures are
+// reported as skipped rather than silently passed.
+func runDisasm(data []byte, view *models.Binary, sink *analysis.Sink, sectionOf func(int64) string) *models.Disassembly {
+	skip := func(why string) *models.Disassembly {
+		return &models.Disassembly{Counts: map[string]int{}, Sites: []models.DisasmSite{}, Skipped: why}
+	}
+	if view == nil {
+		return skip("the executable structure could not be parsed")
+	}
+	bits := 0
+	switch view.Arch {
+	case "x86":
+		bits = 32
+	case "x86-64":
+		bits = 64
+	default:
+		return skip("code-pattern analysis understands x86 and x86-64 only; this file is " + view.Arch)
+	}
+	var regions []disasm.Region
+	add := func(list []models.Section) {
+		for _, s := range list {
+			if strings.Contains(s.Perms, "x") && s.RawSize > 0 {
+				if d := content.Slice(data, s.RawOffset, s.RawSize); len(d) > 0 {
+					regions = append(regions, disasm.Region{Name: s.Name, Offset: int64(s.RawOffset), Code: d})
+				}
+			}
+		}
+	}
+	add(view.Sections)
+	if len(regions) == 0 {
+		add(view.Segments)
+	}
+	if len(regions) == 0 {
+		return skip("no executable section or segment with file data")
+	}
+	d := disasm.Analyze(regions, bits)
+	for i := range d.Sites {
+		st := &d.Sites[i]
+		st.Evidence = sink.Add("code-pattern", st.Detail, st.Offset, 0, sectionOf(st.Offset), "disasm/"+st.Kind, "disasm:"+st.Kind)
+	}
+	return d
+}
+
+func siteDetail(d *models.Disassembly, kind string) string {
+	for _, s := range d.Sites {
+		if s.Kind == kind {
+			return s.Detail
+		}
+	}
+	return ""
 }
 
 func nonNilDecoded(d []models.DecodedString) []models.DecodedString {
@@ -351,6 +427,38 @@ func addAnalysisFindings(rep *models.Report, a *models.Analysis) {
 			EvidenceID: []string{d.Evidence},
 			Action:     "Treat the recovered text like any other string: check its context before treating it as an indicator of compromise.",
 		})
+	}
+	if d := a.Disasm; d != nil && d.Skipped == "" {
+		for _, spec := range []struct{ kind, title string }{
+			{"peb-ldr-walk", "Code walks the loaded-module list through the PEB"},
+			{"api-hash-ror13", "Code contains an API-name hash loop (ror 13)"},
+			{"state-dispatcher", "Code contains a control-flow-flattening dispatcher"},
+		} {
+			n := d.Counts[spec.kind]
+			if n == 0 {
+				continue
+			}
+			var ev, where []string
+			for _, st := range d.Sites {
+				if st.Kind == spec.kind {
+					if len(ev) < 5 && st.Evidence != "" {
+						ev = append(ev, st.Evidence)
+					}
+					if len(where) < 3 {
+						where = append(where, fmt.Sprintf("0x%x", st.Offset))
+					}
+				}
+			}
+			rep.Findings = append(rep.Findings, models.Finding{
+				ID: uniq("obfuscation.code." + spec.kind), Rule: "disasm/" + spec.kind, Class: models.ClassObservation,
+				Category: "obfuscation", Title: spec.title,
+				Summary:  fmt.Sprintf("%d place(s), for example at file offsets %s. %s", n, joinComma(where), siteDetail(d, spec.kind)),
+				Severity: models.SeverityMedium, Confidence: models.ConfidenceMedium,
+				Rationale:  "the instruction pattern is present in the disassembly; what it is used for is not known, and the same idiom can occur in legitimate code",
+				EvidenceID: ev,
+				Action:     "Open the code at these offsets in a disassembler to see what the routine does.",
+			})
+		}
 	}
 	for _, an := range a.Anomalies {
 		rep.Findings = append(rep.Findings, models.Finding{
