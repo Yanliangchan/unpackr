@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/Yanliangchan/unpackr/internal/formats/dotnet"
 	"strings"
 	"time"
 
@@ -63,10 +64,12 @@ func Parse(data []byte) (b *models.Binary, err error) {
 
 	var sizeOfHeaders uint32
 	var epRVA uint32
+	var clrRVA, clrSize uint32
 	switch oh := p.NtHeader.OptionalHeader.(type) {
 	case sw.ImageOptionalHeader64:
 		b.Format, b.Bits, b.ImageBase = "PE32+", 64, oh.ImageBase
 		epRVA, sizeOfHeaders = oh.AddressOfEntryPoint, oh.SizeOfHeaders
+		clrRVA, clrSize = oh.DataDirectory[14].VirtualAddress, oh.DataDirectory[14].Size
 		b.Attributes["subsystem"] = oh.Subsystem.String()
 		b.Attributes["dll_characteristics"] = strings.Join(oh.DllCharacteristics.String(), ",")
 		b.Attributes["linker_version"] = fmt.Sprintf("%d.%d", oh.MajorLinkerVersion, oh.MinorLinkerVersion)
@@ -75,6 +78,7 @@ func Parse(data []byte) (b *models.Binary, err error) {
 	case sw.ImageOptionalHeader32:
 		b.Format, b.Bits, b.ImageBase = "PE32", 32, uint64(oh.ImageBase)
 		epRVA, sizeOfHeaders = oh.AddressOfEntryPoint, oh.SizeOfHeaders
+		clrRVA, clrSize = oh.DataDirectory[14].VirtualAddress, oh.DataDirectory[14].Size
 		b.Attributes["subsystem"] = oh.Subsystem.String()
 		b.Attributes["dll_characteristics"] = strings.Join(oh.DllCharacteristics.String(), ",")
 		b.Attributes["linker_version"] = fmt.Sprintf("%d.%d", oh.MajorLinkerVersion, oh.MinorLinkerVersion)
@@ -159,6 +163,36 @@ func Parse(data []byte) (b *models.Binary, err error) {
 	}
 	if h, err := p.ImpHash(); err == nil {
 		b.ImportHash = h
+	}
+
+	// Managed assemblies: read the metadata tables. Their native imports are
+	// just mscoree; what the code uses is in P/Invoke declarations and member
+	// references, which are added to the import list under their own library
+	// names so the capability rules can see them.
+	if clrRVA != 0 {
+		toOff := func(rva uint32) (int, bool) {
+			for _, sec := range b.Sections {
+				if uint64(rva) >= sec.VirtualAddress && uint64(rva) < sec.VirtualAddress+max(sec.VirtualSize, sec.RawSize) {
+					o := uint64(rva) - sec.VirtualAddress + sec.RawOffset
+					if o < uint64(len(data)) {
+						return int(o), true
+					}
+				}
+			}
+			if uint64(rva) < uint64(sizeOfHeaders) && uint64(rva) < uint64(len(data)) {
+				return int(rva), true
+			}
+			return 0, false
+		}
+		if dn, derr := dotnet.Parse(data, clrRVA, clrSize, toOff); derr == nil {
+			b.DotNet = dn
+			for _, a := range dn.Anomalies {
+				b.Anomalies = append(b.Anomalies, ".NET metadata: "+a)
+			}
+			addManagedImports(b, dn)
+		} else {
+			b.Anomalies = append(b.Anomalies, "CLR header present but the metadata could not be read: "+derr.Error())
+		}
 	}
 
 	// Exports.
@@ -255,4 +289,39 @@ func tlsCallbacks(v interface{}) int {
 		return len(c)
 	}
 	return 0
+}
+
+// ManagedLibrary is the pseudo-library under which member references of a
+// managed assembly are listed ("Process.Start" and the like).
+const ManagedLibrary = ".NET references"
+
+func addManagedImports(b *models.Binary, dn *models.DotNet) {
+	byLib := map[string]*models.Import{}
+	var order []string
+	for _, pi := range dn.PInvokes {
+		lib := pi.Module
+		if lib == "" {
+			lib = "(unnamed native module)"
+		}
+		if !strings.Contains(strings.ToLower(lib), ".") {
+			lib += ".dll" // P/Invoke names may omit the extension
+		}
+		im, ok := byLib[lib]
+		if !ok {
+			im = &models.Import{Library: lib, Functions: []models.ImportFn{}}
+			byLib[lib] = im
+			order = append(order, lib)
+		}
+		im.Functions = append(im.Functions, models.ImportFn{Name: pi.Function})
+	}
+	for _, l := range order {
+		b.Imports = append(b.Imports, *byLib[l])
+	}
+	if len(dn.MemberRefs) > 0 {
+		im := models.Import{Library: ManagedLibrary, Functions: make([]models.ImportFn, 0, len(dn.MemberRefs))}
+		for _, r := range dn.MemberRefs {
+			im.Functions = append(im.Functions, models.ImportFn{Name: r})
+		}
+		b.Imports = append(b.Imports, im)
+	}
 }

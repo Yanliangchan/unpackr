@@ -226,3 +226,41 @@ func FuzzDetect(f *testing.F) {
 		Detect(in, models.PackUnpacked)
 	})
 }
+
+func TestManagedCodeRules(t *testing.T) {
+	mk := func(refs ...string) *analysis.Input {
+		fns := make([]models.ImportFn, len(refs))
+		for i, r := range refs {
+			fns[i] = models.ImportFn{Name: r}
+		}
+		b := &models.Binary{Format: "PE32", Imports: []models.Import{{Library: ".NET references", Functions: fns}}}
+		return &analysis.Input{Family: "pe", Bin: b, Sink: analysis.NewSink("t"), Scan: &content.Scan{}}
+	}
+	has := func(caps []models.Capability, id string) bool {
+		for _, c := range caps {
+			if c.ID == id {
+				return true
+			}
+		}
+		return false
+	}
+	got := Detect(mk("Assembly.Load", "Process.Start", "WebClient.DownloadString", "Convert.FromBase64String", "Aes.CreateDecryptor"), models.PackUnpacked)
+	for _, id := range []string{"dotnet.reflective-load", "dotnet.process", "dotnet.download", "dotnet.decode-decrypt"} {
+		if !has(got, id) {
+			t.Errorf("missing %s in %+v", id, got)
+		}
+	}
+	// Half of a two-part pattern is not the pattern.
+	if got := Detect(mk("Convert.FromBase64String"), models.PackUnpacked); has(got, "dotnet.decode-decrypt") {
+		t.Error("base64 decoding alone must not be reported as decode-and-decrypt")
+	}
+	// Names that only look similar are not matches.
+	if got := Detect(mk("MyProcess.Start", "Assembly.GetName"), models.PackUnpacked); has(got, "dotnet.process") || has(got, "dotnet.reflective-load") {
+		t.Errorf("lookalike names matched: %+v", got)
+	}
+	for _, c := range Detect(mk("Assembly.LoadFrom"), models.PackUnpacked) {
+		if c.ID == "dotnet.reflective-load" && c.Confidence == models.ConfidenceDefinitive {
+			t.Error("an inference from a reference can never be definitive")
+		}
+	}
+}

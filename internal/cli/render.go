@@ -231,6 +231,9 @@ func renderBinary(w io.Writer, b *models.Binary, verbose bool, st terminal.Style
 			}
 		}
 	}
+	if dn := b.DotNet; dn != nil {
+		renderDotNet(w, dn, verbose, st)
+	}
 	if len(b.Exports) > 0 {
 		fmt.Fprintf(w, "\n  %s\n", st.Bold(fmt.Sprintf("Exports: %d", len(b.Exports))))
 		if verbose {
@@ -727,4 +730,50 @@ func head(s string, n int) string {
 		return s
 	}
 	return string(r[:n]) + "…"
+}
+
+func renderDotNet(w io.Writer, dn *models.DotNet, verbose bool, st terminal.Style) {
+	fmt.Fprintf(w, "\n  %s\n", st.Bold(".NET assembly"))
+	id := safe(dn.AssemblyName)
+	if dn.AssemblyVersion != "" {
+		id += " " + safe(dn.AssemblyVersion)
+	}
+	fmt.Fprintf(w, "  %-12s %s   metadata %s   %s\n", "Assembly", id, safe(dn.MetadataVersion), safe(strings.Join(dn.Flags, ", ")))
+	fmt.Fprintf(w, "  %-12s %d types, %d methods, %d fields, %d member references, %d P/Invoke declarations, %d resources\n", "Contents",
+		dn.Counts["TypeDef"], dn.Counts["MethodDef"], dn.Counts["Field"], dn.Counts["MemberRef"], len(dn.PInvokes), len(dn.Resources))
+	if dn.Names.Total > 0 {
+		fmt.Fprintf(w, "  %-12s %d names: %d unreadable, %d of one or two characters\n", "Names", dn.Names.Total, dn.Names.NonPrintable, dn.Names.Tiny)
+	}
+	limit := 8
+	if verbose {
+		limit = 1 << 30
+	}
+	if len(dn.AssemblyRefs) > 0 {
+		fmt.Fprintf(w, "  %-12s", "References")
+		for i, r := range dn.AssemblyRefs {
+			if i >= limit {
+				fmt.Fprintf(w, " … %d more", len(dn.AssemblyRefs)-i)
+				break
+			}
+			fmt.Fprintf(w, " %s;", safe(r))
+		}
+		fmt.Fprintln(w)
+	}
+	for i, p := range dn.PInvokes {
+		if i >= limit {
+			fmt.Fprintf(w, "  %-12s … %d more\n", "", len(dn.PInvokes)-i)
+			break
+		}
+		fmt.Fprintf(w, "  %-12s %s!%s\n", "P/Invoke", safe(p.Module), safe(p.Function))
+	}
+	for i, r := range dn.Resources {
+		if i >= limit {
+			break
+		}
+		kind := r.Kind
+		if kind == "" {
+			kind = "data"
+		}
+		fmt.Fprintf(w, "  %-12s %s (%d bytes, %s, entropy %.2f)\n", "Resource", safe(clip(r.Name, 48)), r.Size, kind, r.Entropy)
+	}
 }

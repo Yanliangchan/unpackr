@@ -2,6 +2,9 @@ package engine
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -139,4 +142,45 @@ func TestObfuscationCorpus(t *testing.T) {
 			}
 		}
 	})
+}
+
+// realManaged returns a genuine managed assembly shipped as test data with the
+// saferwall/pe module (a benign Microsoft-signed C++/CLI plug-in). It is read in
+// place and never copied into this repository.
+func realManaged(t *testing.T, name string) string {
+	t.Helper()
+	out, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", "github.com/saferwall/pe").Output()
+	if err != nil {
+		t.Skip("module directory not available")
+	}
+	p := filepath.Join(strings.TrimSpace(string(out)), "test", name)
+	if _, err := os.Stat(p); err != nil {
+		t.Skip("sample not available")
+	}
+	return p
+}
+
+func TestRealManagedAssemblyEndToEnd(t *testing.T) {
+	rep, err := Analyze(context.Background(), realManaged(t, "pspluginwkr.dll"), opts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dn := rep.Binary.DotNet
+	if dn == nil || dn.AssemblyName != "pspluginwkr" || dn.Counts["TypeDef"] != 169 {
+		t.Fatalf("metadata not read: %+v", dn)
+	}
+	var lib bool
+	for _, im := range rep.Binary.Imports {
+		lib = lib || (im.Library == ".NET references" && len(im.Functions) > 100)
+	}
+	if !lib {
+		t.Error("member references should be listed as imports of the .NET references library")
+	}
+	// A benign, readable assembly must not look protected.
+	if rep.Analysis.Packing.State != models.PackUnpacked {
+		t.Errorf("benign assembly flagged: %s %+v", rep.Analysis.Packing.State, rep.Analysis.Packing.Signals)
+	}
+	if len(rep.Analysis.Decoded) != 0 {
+		t.Errorf("decoded strings in a benign assembly: %+v", rep.Analysis.Decoded)
+	}
 }
