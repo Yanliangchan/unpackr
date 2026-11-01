@@ -26,6 +26,7 @@ type Banner struct {
 	ID       string
 	Category string
 	Title    string
+	Style    string // optional colour style; see StyleNames
 	Lines    []string
 	Custom   bool
 }
@@ -101,6 +102,8 @@ func Parse(name string, data []byte, custom bool) (Banner, error) {
 				b.Category = v
 			case "title":
 				b.Title = v
+			case "style":
+				b.Style = v
 			}
 		}
 		lines = lines[end+1:]

@@ -2,6 +2,7 @@
 id: 062
 category: picture
 title: Cow reads assembly
+style: sunset
 ---
    ______________________________________________
   / mov eax, 1 ; moo(v). It is the first line of \

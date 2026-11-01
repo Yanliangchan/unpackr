@@ -2,6 +2,7 @@
 id: 068
 category: picture
 title: Magnifier over MZ
+style: ocean
 ---
             .-""""""-.
           .'  ______  '.

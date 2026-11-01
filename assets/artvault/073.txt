@@ -2,6 +2,7 @@
 id: 073
 category: picture
 title: Sandbox-aware cat
+style: plasma
 ---
        /\_/\
       ( o.o )        meow.exe

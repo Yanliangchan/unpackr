@@ -2,6 +2,7 @@
 id: 069
 category: picture
 title: Ghost in .rdata
+style: plasma
 ---
             .-"""-.
            / .===. \            BOO.

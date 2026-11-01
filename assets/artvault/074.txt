@@ -2,6 +2,7 @@
 id: 074
 category: picture
 title: Disassembler robot
+style: ocean
 ---
           _____
          /_____\

@@ -73,6 +73,15 @@ banner is not repeated when an alternative exists. Custom artwork goes in
 ASCII, no control bytes) and invalid ones are ignored with a warning in
 `unpackr art list`.
 
+Colour is added when the banner is printed, never stored in the artwork files.
+It follows the terminal: 24-bit colour when `COLORTERM` says `truecolor`, the
+256-colour palette when `TERM` ends in `256color`, otherwise the 16 ANSI
+colours, and none for `NO_COLOR`, `--no-color` or a pipe. Each banner has a
+`style` in its front matter (`fire`, `ice`, `matrix`, `sunset`, `toxic`,
+`gold`, `plasma`, `ocean`, `rainbow`, `cyan`); banners without one use their
+category's style, and custom artwork stays plain cyan unless it names a style.
+Try one with `unpackr art show 064 --style matrix`.
+
 ## Configuration
 
 `~/.config/unpackr/config.yaml`; unknown keys are errors.

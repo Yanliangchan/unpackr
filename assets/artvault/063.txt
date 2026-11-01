@@ -2,6 +2,7 @@
 id: 063
 category: picture
 title: Penguin with root
+style: ice
 ---
              ______________________________________________
             / sudo make me a sandwich. Then run strings on \

@@ -2,6 +2,7 @@
 id: 067
 category: picture
 title: Not a bug
+style: toxic
 ---
             \   /
              \_/

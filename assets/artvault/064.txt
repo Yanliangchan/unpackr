@@ -2,6 +2,7 @@
 id: 064
 category: picture
 title: Skull and crossbones
+style: fire
 ---
           .-"      "-.
          /            \

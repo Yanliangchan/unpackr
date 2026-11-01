@@ -2,6 +2,7 @@
 id: 075
 category: picture
 title: Schrodinger binary
+style: rainbow
 ---
         +-------------------------------+
        /                               /|

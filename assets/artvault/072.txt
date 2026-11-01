@@ -2,6 +2,7 @@
 id: 072
 category: picture
 title: Coffee-driven analysis
+style: sunset
 ---
             ( (
              ) )

@@ -2,6 +2,7 @@
 id: 070
 category: picture
 title: Launch sequence
+style: fire
 ---
                 /\
                /  \

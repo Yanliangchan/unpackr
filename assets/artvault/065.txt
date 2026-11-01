@@ -2,6 +2,7 @@
 id: 065
 category: picture
 title: Rubber duck debugger
+style: gold
 ---
                  __
              ___( o)>        "Explain the control-flow graph to the duck.

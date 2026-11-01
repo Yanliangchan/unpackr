@@ -98,7 +98,11 @@ func (g *globals) maybeBanner(cmd *cobra.Command, cfg config.Config, machineOutp
 	artvault.RememberShown(state, b.ID)
 	st := terminal.Style{On: terminal.ColorEnabled(os.Stderr, g.noColor)}
 	p := func(format string, a ...any) { _, _ = fmt.Fprintf(os.Stderr, format, a...) }
-	p("\n%s\n\n", st.Cyan(b.Text()))
+	depth := artvault.DepthNone
+	if st.On {
+		depth = artvault.DetectDepth()
+	}
+	p("\n%s\n\n", artvault.Paint(b, "", depth))
 	p("%s %s  |  %s  |  offline  |  ArtVault #%s\n", st.Bold(version.Name), version.Version, version.Platform(), b.ID)
 	p("%s\n", st.Dim(version.Tagline+"  "+repeat("-", 30)))
 }

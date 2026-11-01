@@ -2,6 +2,7 @@
 id: 071
 category: picture
 title: Padlock with the key taped on
+style: gold
 ---
             .-""-.
            /  __  \
