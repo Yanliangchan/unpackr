@@ -64,7 +64,10 @@ func ExtractIndicators(hits []Hit, sectionOf func(off int64) string) []models.In
 		if len(t) < 6 {
 			continue
 		}
-		urlSpans := reURL.FindAllStringIndex(t, -1)
+		var urlSpans [][]int
+		if strings.Contains(t, "://") {
+			urlSpans = reURL.FindAllStringIndex(t, -1)
+		}
 		for _, sp := range urlSpans {
 			u := strings.TrimRight(t[sp[0]:sp[1]], `.,;:)]}'"`)
 			if host := hostOf(u); benignHosts[host] {
@@ -77,7 +80,8 @@ func ExtractIndicators(hits []Hit, sectionOf func(off int64) string) []models.In
 		for i := len(urlSpans) - 1; i >= 0; i-- {
 			rest = rest[:urlSpans[i][0]] + " " + rest[urlSpans[i][1]:]
 		}
-		for _, m := range reIPv4.FindAllStringSubmatch(rest, -1) {
+		g := guardsFor(rest)
+		for _, m := range g.ipv4(rest) {
 			ip := net.ParseIP(m[1])
 			if ip == nil || ip.IsUnspecified() {
 				continue
@@ -95,7 +99,7 @@ func ExtractIndicators(hits []Hit, sectionOf func(off int64) string) []models.In
 			}
 			add("ipv4", m[1], h, note)
 		}
-		if !reModulePath.MatchString(rest) {
+		if g.dot && !reModulePath.MatchString(rest) {
 			for _, m := range reDomain.FindAllStringSubmatchIndex(rest, -1) {
 				d := rest[m[2]:m[3]]
 				// Skip identifiers such as system.net.http or file names.
@@ -124,25 +128,25 @@ func ExtractIndicators(hits []Hit, sectionOf func(off int64) string) []models.In
 				add("domain", d, h, "domain-shaped string; verify it is not an identifier")
 			}
 		}
-		for _, e := range reEmail.FindAllString(rest, -1) {
+		for _, e := range g.find(g.at, reEmail, rest) {
 			add("email", e, h, "")
 		}
-		for _, p := range reWinPath.FindAllString(rest, -1) {
+		for _, p := range g.find(g.drive, reWinPath, rest) {
 			add("windows-path", p, h, "")
 		}
-		for _, p := range reUNC.FindAllString(rest, -1) {
+		for _, p := range g.find(g.unc, reUNC, rest) {
 			add("windows-path", p, h, "UNC path")
 		}
-		for _, m := range reUnix.FindAllStringSubmatch(rest, -1) {
+		for _, m := range g.unix(rest) {
 			add("unix-path", m[1], h, "")
 		}
-		for _, r := range reReg.FindAllString(rest, -1) {
+		for _, r := range g.find(g.bs, reReg, rest) {
 			add("registry", r, h, "")
 		}
-		for _, r := range reRegRun.FindAllString(rest, -1) {
+		for _, r := range g.find(g.bs, reRegRun, rest) {
 			add("registry", r, h, "autorun / persistence location")
 		}
-		for _, c := range reCmd.FindAllString(rest, -1) {
+		for _, c := range g.find(g.space, reCmd, rest) {
 			add("command", strings.TrimSpace(c), h, "")
 		}
 	}
@@ -172,4 +176,43 @@ func hostOf(u string) string {
 		u = u[:i]
 	}
 	return strings.ToLower(u)
+}
+
+// guards records cheap necessary conditions for each indicator pattern. Every
+// pattern contains the literal it is guarded by in all of its alternatives, so
+// a failed guard proves there is no match and the regexp is skipped. This is
+// an optimisation only; TestGuardsAreNecessary checks it cannot hide a match.
+type guards struct{ dot, at, drive, unc, slash, bs, space bool }
+
+func guardsFor(s string) guards {
+	return guards{
+		dot:   strings.IndexByte(s, '.') >= 0,
+		at:    strings.IndexByte(s, '@') >= 0,
+		drive: strings.Contains(s, ":\\"),
+		unc:   strings.Contains(s, "\\\\"),
+		slash: strings.IndexByte(s, '/') >= 0,
+		bs:    strings.IndexByte(s, '\\') >= 0,
+		space: strings.ContainsAny(s, " \t\n\f\r"),
+	}
+}
+
+func (g guards) find(ok bool, re *regexp.Regexp, s string) []string {
+	if !ok {
+		return nil
+	}
+	return re.FindAllString(s, -1)
+}
+
+func (g guards) ipv4(s string) [][]string {
+	if !g.dot {
+		return nil
+	}
+	return reIPv4.FindAllStringSubmatch(s, -1)
+}
+
+func (g guards) unix(s string) [][]string {
+	if !g.slash {
+		return nil
+	}
+	return reUnix.FindAllStringSubmatch(s, -1)
 }

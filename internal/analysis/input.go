@@ -71,6 +71,31 @@ func (in *Input) FindBytes(needle []byte) int64 {
 	return int64(bytes.Index(in.Data, needle))
 }
 
+// FindAnchored returns the first match of re, like FindRegexp, but only
+// examines windows around occurrences of the literal anchor. It is equivalent
+// to FindRegexp whenever every match of re contains anchor and begins at most
+// before bytes ahead of it and ends at most after bytes behind its start.
+// Scanning the whole image with a backtracking-free regexp engine is orders of
+// magnitude slower than a literal search, which is why this exists.
+func (in *Input) FindAnchored(re *regexp.Regexp, anchor string, before, after int) (int64, string) {
+	a := []byte(anchor)
+	from := 0
+	for from <= len(in.Data) {
+		i := bytes.Index(in.Data[from:], a)
+		if i < 0 {
+			return -1, ""
+		}
+		i += from
+		lo := max(0, i-before)
+		hi := min(len(in.Data), i+len(a)+after)
+		if loc := re.FindIndex(in.Data[lo:hi]); loc != nil && lo+loc[0] <= i && i < lo+loc[1] {
+			return int64(lo + loc[0]), string(in.Data[lo+loc[0] : lo+loc[1]])
+		}
+		from = i + 1
+	}
+	return -1, ""
+}
+
 // FindRegexp returns the first match (offset and text) or -1.
 func (in *Input) FindRegexp(re *regexp.Regexp) (int64, string) {
 	loc := re.FindIndex(in.Data)

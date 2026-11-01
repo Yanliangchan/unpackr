@@ -10,6 +10,7 @@ import (
 	"hash/fnv"
 	"math"
 	"strings"
+	"sync"
 
 	"github.com/glaslos/ssdeep"
 	"github.com/glaslos/tlsh"
@@ -27,11 +28,18 @@ const SketchSize = 128
 // Hash computes ssdeep and TLSH for data. Either is empty when the input is
 // too small or too uniform for the algorithm.
 func Hash(data []byte) (ssd, tl string) {
-	if len(data) >= 1 {
-		if s, err := ssdeep.FuzzyBytes(data); err == nil {
-			ssd = s
+	// The two algorithms only read data, so they run concurrently; the result
+	// does not depend on scheduling.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if len(data) >= 1 {
+			if s, err := ssdeep.FuzzyBytes(data); err == nil {
+				ssd = s
+			}
 		}
-	}
+	}()
 	if len(data) >= MinTLSHBytes {
 		if h, err := tlsh.HashBytes(data); err == nil && h != nil {
 			if s := h.String(); len(s) == 70 {
@@ -40,6 +48,7 @@ func Hash(data []byte) (ssd, tl string) {
 			}
 		}
 	}
+	wg.Wait()
 	return
 }
 

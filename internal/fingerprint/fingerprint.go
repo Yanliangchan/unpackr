@@ -137,7 +137,7 @@ versioned:
 func (b *builder) rustLang() {
 	in := b.in
 	var sigs []models.Signal
-	if off, m := in.FindRegexp(reRustPath); off >= 0 {
+	if off, m := in.FindAnchored(reRustPath, "/rustc/", 0, 48); off >= 0 {
 		ev := in.Sink.Add("string", m, off, int64(len(m)), in.SectionAt(off), "fingerprint/rust/path", "rust:path")
 		sigs = append(sigs, models.Signal{ID: "lang.rust.path", Detail: "standard-library source path embedded (panic location)", Strength: "strong", Family: "rust:path", Evidence: []string{ev}})
 	}
@@ -154,7 +154,7 @@ func (b *builder) rustLang() {
 	lang.signals = sigs
 	comp := b.get(b.compilers, "rustc (LLVM)")
 	comp.signals = append(comp.signals, sigs...)
-	if off, m := in.FindRegexp(reRustPath); off >= 0 {
+	if off, m := in.FindAnchored(reRustPath, "/rustc/", 0, 48); off >= 0 {
 		comp.detail = "built with a rustc whose commit is " + reRustPath.FindStringSubmatch(m)[1][:12] + " (version not derivable from the hash alone)"
 	}
 }
@@ -296,13 +296,13 @@ func (b *builder) gccClang() {
 		ev := in.Sink.Add("string", h.Text, h.Offset, int64(len(h.Text)), in.SectionAt(h.Offset), "fingerprint/mingw/runtime", "mingw:str")
 		b.sig(b.get(b.compilers, "GCC (MinGW-w64)"), "comp.mingw", "MinGW runtime string", "strong", "mingw:str", ev)
 	}
-	if off, m := in.FindRegexp(reGCCComment); off >= 0 {
+	if off, m := in.FindAnchored(reGCCComment, "GCC: (", 0, 256); off >= 0 {
 		ev := in.Sink.Add("string", m, off, int64(len(m)), in.SectionAt(off), "fingerprint/gcc/comment", "gcc:comment")
 		c := b.get(b.compilers, "GCC")
 		c.detail = strings.TrimPrefix(m, "GCC: ")
 		b.sig(c, "comp.gcc.comment", ".comment-style GCC version string", "strong", "gcc:comment", ev)
 	}
-	if off, m := in.FindRegexp(reClang); off >= 0 {
+	if off, m := in.FindAnchored(reClang, "clang version ", 7, 64); off >= 0 {
 		ev := in.Sink.Add("string", m, off, int64(len(m)), in.SectionAt(off), "fingerprint/clang/version", "clang:comment")
 		c := b.get(b.compilers, "Clang / LLVM")
 		c.detail = m
