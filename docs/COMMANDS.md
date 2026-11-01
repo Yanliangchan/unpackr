@@ -9,6 +9,8 @@ working is refused with exit code 4 rather than silently ignored.
 unpackr [flags] <file|directory>...
 unpackr doctor
 unpackr art list | show <id> | categories | favourite <id> | favourites
+unpackr db path | stats | find <value> [--kind K] | forget <sha256>
+unpackr case new|list|add|note|search|timeline|close|reopen|report
 unpackr completion bash|zsh|fish
 unpackr --version
 ```
@@ -30,6 +32,7 @@ A path may appear before or after flags. A file literally named `doctor`,
 | | `--threads N` | works | Concurrent analyses in batch mode |
 | | `--timeout D` | works | Per-worker time limit, e.g. `90s` |
 | | `--config FILE` | works | YAML configuration |
+| | `--no-db` | works | Do not read or write the local sample database |
 | | `--require-sandbox` | works | Fail instead of analysing with reduced confinement |
 | | `--offline` | accepted | Always true; the build has no network code |
 | | `--no-banner`, `--banner SEL`, `--quiet`, `--no-color` | works | Presentation |
@@ -124,3 +127,23 @@ HTML, Markdown and terminal output defang network indicators and sanitise every
 string taken from the sample. JSON and the CSV `value` column keep raw values
 for tooling; CSV cells beginning with `=`, `+`, `-`, `@`, tab or CR are prefixed
 with an apostrophe so spreadsheets do not execute them.
+
+## Local database and cases
+
+- Location: `$XDG_DATA_HOME/unpackr/db.sqlite` (default `~/.local/share/unpackr/`),
+  directory 0700, file 0600. Config: `use_database` (default true) and
+  `database_path`.
+- Stores, per SHA-256: hashes, size, last file name, first/last seen, up to 20
+  stored reports (gzip), pivot values (indicators, hosts, import hash, section
+  layout, tested YARA rules, capabilities, ATT&CK ids) and links to unpacked
+  layers. It never stores sample bytes. Reports contain absolute paths of the
+  files as analysed.
+- A database problem is a warning, never a failed analysis.
+- `db find <value> --kind K`: `ioc` (any indicator or host, default), `hash`
+  (SHA-256 prefix), `imphash`, `section-layout`, `yara`, `capability`,
+  `attack`, `packer`, `language`, `host`, or `indicator:<type>`.
+- `case add` accepts a file (analysed first) or a SHA-256 prefix (at least 6 hex
+  characters, unambiguous). Case names: 1-64 characters from letters, digits,
+  `.`, `_`, `-`.
+- `case report <case> [-o file]`: markdown by default; `.html`, `.csv`, `.json`
+  by extension or `--format`.

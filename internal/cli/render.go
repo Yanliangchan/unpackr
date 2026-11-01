@@ -69,6 +69,9 @@ func renderReport(w io.Writer, r *models.Report, verbose bool, st terminal.Style
 		}
 	}
 
+	if r.Known != nil {
+		renderKnown(w, r.Known, verbose, st)
+	}
 	if r.Binary != nil {
 		renderBinary(w, r.Binary, verbose, st)
 	}
@@ -644,4 +647,40 @@ func renderExtraction(w io.Writer, e *models.Extraction, verbose bool, st termin
 			}
 		}
 	}
+}
+
+func renderKnown(w io.Writer, k *models.KnownSample, verbose bool, st terminal.Style) {
+	fmt.Fprintf(w, "\n%s\n", st.Bold(st.Cyan("Seen before")))
+	fmt.Fprintf(w, "  %-10s first seen %s, analysed %d time(s) before, last on %s\n", "History", k.FirstSeen, k.TimesSeen, k.LastSeen)
+	if l := k.Last; l != nil {
+		line := fmt.Sprintf("UNPACKR %s (%s): packing %s", safe(l.ToolVersion), safe(l.Profile), safe(orDash(l.PackingState)))
+		if l.PackingFamily != "" {
+			line += " (" + safe(l.PackingFamily) + ")"
+		}
+		if l.Language != "" {
+			line += ", " + safe(l.Language)
+		}
+		fmt.Fprintf(w, "  %-10s %s; %d findings (%d high, %d medium)\n", "Last time", line, l.Findings, l.High, l.Medium)
+	}
+	if len(k.Cases) > 0 {
+		fmt.Fprintf(w, "  %-10s %s\n", "Cases", safe(strings.Join(k.Cases, ", ")))
+	}
+	if k.ToolChange != "" {
+		fmt.Fprintf(w, "  %-10s %s %s\n", "Tool", safe(k.ToolChange), st.Dim("(results may differ because the analysis changed, not the file)"))
+	}
+	if k.Changes != nil {
+		any := len(k.Changes.Packing)+len(k.Changes.Fingerprint)+len(k.Changes.Capabilities.OnlyA)+len(k.Changes.Capabilities.OnlyB)+len(k.Changes.Indicators.OnlyA)+len(k.Changes.Indicators.OnlyB) > 0
+		if !any {
+			fmt.Fprintf(w, "  %-10s %s\n", "Changes", st.Dim("no change in packing, fingerprint, capabilities or indicators since last time"))
+		} else {
+			renderComparison(w, k.Changes, verbose, st, "before", "now")
+		}
+	}
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }

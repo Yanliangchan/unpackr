@@ -113,3 +113,81 @@ type Extraction struct {
 	Dir           string           `json:"dir,omitempty"`
 	Notes         []string         `json:"notes,omitempty"`
 }
+
+// PreviousAnalysis summarises an earlier analysis of the same file.
+type PreviousAnalysis struct {
+	At            string `json:"analysed_at"`
+	ToolVersion   string `json:"tool_version"`
+	Profile       string `json:"profile"`
+	PackingState  string `json:"packing_state,omitempty"`
+	PackingFamily string `json:"packing_family,omitempty"`
+	Language      string `json:"language,omitempty"`
+	Compiler      string `json:"compiler,omitempty"`
+	Findings      int    `json:"findings"`
+	High          int    `json:"high"`
+	Medium        int    `json:"medium"`
+}
+
+// KnownSample is what the local database remembered about a file before this
+// analysis, keyed by SHA-256.
+type KnownSample struct {
+	FirstSeen  string            `json:"first_seen"`
+	LastSeen   string            `json:"last_seen"`
+	TimesSeen  int               `json:"times_seen"`
+	Analyses   int               `json:"stored_analyses"`
+	Last       *PreviousAnalysis `json:"last_analysis,omitempty"`
+	Cases      []string          `json:"cases"`
+	Derived    []string          `json:"derived_files"` // SHA-256 of unpacked layers seen before
+	Changes    *Comparison       `json:"changes_since_last,omitempty"`
+	ToolChange string            `json:"tool_change,omitempty"`
+}
+
+// CaseSample is one sample in a case report.
+type CaseSample struct {
+	SHA256    string `json:"sha256"`
+	Name      string `json:"name"`
+	Format    string `json:"format"`
+	Packing   string `json:"packing"`
+	Language  string `json:"language"`
+	Findings  int    `json:"findings"`
+	High      int    `json:"high"`
+	Medium    int    `json:"medium"`
+	FirstSeen string `json:"first_seen"`
+	LastSeen  string `json:"last_seen"`
+}
+
+// CaseIndicator is an indicator value and the case samples carrying it.
+type CaseIndicator struct {
+	Type    string   `json:"type"`
+	Value   string   `json:"value"`
+	Samples []string `json:"samples"` // SHA-256
+}
+
+// CaseNote is an analyst note.
+type CaseNote struct {
+	At     string `json:"at"`
+	SHA256 string `json:"sha256,omitempty"`
+	Body   string `json:"body"`
+}
+
+// CaseEvent is a timeline entry.
+type CaseEvent struct {
+	At     string `json:"at"`
+	Kind   string `json:"kind"`
+	SHA256 string `json:"sha256,omitempty"`
+	Detail string `json:"detail"`
+}
+
+// CaseReport is an investigation: its samples, shared indicators, notes and
+// timeline.
+type CaseReport struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Status      string          `json:"status"`
+	CreatedAt   string          `json:"created_at"`
+	Generated   string          `json:"generated_at"`
+	Samples     []CaseSample    `json:"samples"`
+	Indicators  []CaseIndicator `json:"indicators"`
+	Notes       []CaseNote      `json:"notes"`
+	Timeline    []CaseEvent     `json:"timeline"`
+}

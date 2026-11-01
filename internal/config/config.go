@@ -25,6 +25,8 @@ type Config struct {
 	MaxUnpackDepth    int     `yaml:"max_unpack_depth"`    // nested layers
 	ExtractMaxMB      int64   `yaml:"extract_max_mb"`      // total extracted bytes per container
 	ExtractMaxEntries int     `yaml:"extract_max_entries"` // entries per container
+	UseDatabase       bool    `yaml:"use_database"`        // remember analysed files locally
+	DatabasePath      string  `yaml:"database_path"`       // default $XDG_DATA_HOME/unpackr/db.sqlite
 	Banner            string  `yaml:"banner"`              // random | NNN | category | off
 }
 
@@ -45,6 +47,7 @@ func Default() Config {
 		MaxUnpackDepth:    3,
 		ExtractMaxMB:      1024,
 		ExtractMaxEntries: 20000,
+		UseDatabase:       true,
 		Banner:            "random",
 	}
 }
@@ -59,6 +62,18 @@ func Dir() string {
 		return ""
 	}
 	return filepath.Join(h, ".config", "unpackr")
+}
+
+// DataDir returns the directory for the local database.
+func DataDir() string {
+	if d := os.Getenv("XDG_DATA_HOME"); d != "" {
+		return filepath.Join(d, "unpackr")
+	}
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(h, ".local", "share", "unpackr")
 }
 
 // StateDir returns the directory for small mutable state such as the last banner.

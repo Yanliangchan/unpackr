@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,10 +40,28 @@ type result struct {
 	code           int
 }
 
+var (
+	dataMu   sync.Mutex
+	dataDirs = map[string]string{}
+)
+
+// dataDir gives each test its own database location, shared by the several
+// runs inside that test, so tests never touch the real ~/.local/share.
+func dataDir(t *testing.T) string {
+	dataMu.Lock()
+	defer dataMu.Unlock()
+	d, ok := dataDirs[t.Name()]
+	if !ok {
+		d = t.TempDir()
+		dataDirs[t.Name()] = d
+	}
+	return d
+}
+
 func run(t *testing.T, args ...string) result {
 	t.Helper()
 	cmd := exec.Command(bin, args...)
-	cmd.Env = append(os.Environ(), "XDG_STATE_HOME="+t.TempDir(), "XDG_CONFIG_HOME="+t.TempDir())
+	cmd.Env = append(os.Environ(), "XDG_STATE_HOME="+t.TempDir(), "XDG_CONFIG_HOME="+t.TempDir(), "XDG_DATA_HOME="+dataDir(t))
 	var o, e bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &o, &e
 	err := cmd.Run()
@@ -528,5 +547,116 @@ func TestBatchAndCompareReports(t *testing.T) {
 	r := run(t, "-q", d, "--format", "csv")
 	if !strings.HasPrefix(r.stdout, "name,sha256,format") {
 		t.Fatalf("%.100s", r.stdout)
+	}
+}
+
+func TestSampleMemoryAndCasesThroughTheCLI(t *testing.T) {
+	d := t.TempDir()
+	a := write(t, d, "a.exe", append(samplePE(), []byte("beacon http://c2.shared.example.xyz/x")...), 0o600)
+	b := write(t, d, "b.exe", append(samplePE(), []byte("other http://c2.shared.example.xyz/y more")...), 0o600)
+
+	// First analysis: nothing is known yet.
+	r := run(t, "-i", a, "--no-banner")
+	if r.code != 0 || strings.Contains(r.stdout, "Seen before") {
+		t.Fatalf("%d %s", r.code, r.stdout)
+	}
+	// Second: the file is remembered.
+	r = run(t, "-i", a, "--no-banner")
+	if !strings.Contains(r.stdout, "Seen before") || !strings.Contains(r.stdout, "analysed 1 time(s) before") {
+		t.Fatalf("memory not shown:\n%.600s", r.stdout)
+	}
+	// The renamed copy is the same sample.
+	renamed := write(t, d, "totally-different-name.bin", append(samplePE(), []byte("beacon http://c2.shared.example.xyz/x")...), 0o600)
+	if r := run(t, "-i", renamed, "--no-banner"); !strings.Contains(r.stdout, "Seen before") {
+		t.Fatal("identity must be the SHA-256, not the name")
+	}
+	if r := run(t, "-i", a, "--format", "json"); !strings.Contains(r.stdout, `"known_sample"`) {
+		t.Fatal("known_sample missing from JSON")
+	}
+
+	// Database file permissions and stats.
+	db := filepath.Join(dataDir(t), "unpackr", "db.sqlite")
+	if st, err := os.Stat(db); err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("database file: %v %v", st, err)
+	}
+	if r := run(t, "db", "stats"); !strings.Contains(r.stdout, "Samples    1") {
+		t.Fatalf("%s", r.stdout)
+	}
+
+	// Cases.
+	for _, args := range [][]string{
+		{"case", "new", "op-test", "a", "test", "case"},
+		{"case", "add", "op-test", a, b},
+		{"case", "note", "op-test", "both", "beacon", "to", "the", "same", "host"},
+	} {
+		if r := run(t, args...); r.code != 0 {
+			t.Fatalf("%v: %d %s %s", args, r.code, r.stdout, r.stderr)
+		}
+	}
+	if r := run(t, "case", "search", "same host"); !strings.Contains(r.stdout, "op-test") {
+		t.Fatalf("%s", r.stdout)
+	}
+	r = run(t, "case", "report", "op-test")
+	for _, want := range []string{"# Case op-test", "Samples (2)", "c2[.]shared[.]example[.]xyz", "Timeline", "sample-added"} {
+		if !strings.Contains(r.stdout, want) {
+			t.Errorf("case report lacks %q:\n%s", want, r.stdout)
+		}
+	}
+	if strings.Contains(r.stdout, "c2.shared.example.xyz") {
+		t.Error("un-defanged indicator in the case report")
+	}
+	out := filepath.Join(t.TempDir(), "case.html")
+	if r := run(t, "case", "report", "op-test", "-o", out); r.code != 0 {
+		t.Fatalf("%s", r.stderr)
+	}
+	if h, _ := os.ReadFile(out); !strings.Contains(string(h), "<!doctype html>") || strings.Contains(string(h), "<script") {
+		t.Fatal("case HTML report wrong")
+	}
+	if r := run(t, "db", "find", "c2.shared.example.xyz"); strings.Count(r.stdout, "\n") != 2 {
+		t.Fatalf("pivot on the shared indicator should find both samples:\n%s", r.stdout)
+	}
+	if r := run(t, "case", "add", "nope", a); r.code != 2 {
+		t.Fatalf("unknown case: %d", r.code)
+	}
+	if r := run(t, "case", "new", "bad name"); r.code != 2 {
+		t.Fatalf("invalid case name: %d", r.code)
+	}
+}
+
+func TestNoDBLeavesNothingBehind(t *testing.T) {
+	p := write(t, t.TempDir(), "s.exe", samplePE(), 0o600)
+	if r := run(t, "-i", p, "--no-db", "--no-banner"); r.code != 0 {
+		t.Fatalf("%s", r.stderr)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir(t), "unpackr")); err == nil {
+		t.Fatal("--no-db still created a database")
+	}
+	if r := run(t, "-i", p, "--no-banner"); r.code != 0 {
+		t.Fatal(r.stderr)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir(t), "unpackr", "db.sqlite")); err != nil {
+		t.Fatal("the database should be created by default")
+	}
+}
+
+func TestDatabaseFailureNeverBlocksAnalysis(t *testing.T) {
+	p := write(t, t.TempDir(), "s.exe", samplePE(), 0o600)
+	cfg := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(cfg, "unpackr"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// A database path that cannot be created (its parent is a file).
+	blocker := filepath.Join(t.TempDir(), "file")
+	_ = os.WriteFile(blocker, []byte("x"), 0o600)
+	_ = os.WriteFile(filepath.Join(cfg, "unpackr", "config.yaml"), []byte("database_path: "+filepath.Join(blocker, "db.sqlite")+"\n"), 0o600)
+	cmd := exec.Command(bin, "-i", p, "--no-banner")
+	cmd.Env = append(os.Environ(), "XDG_CONFIG_HOME="+cfg, "XDG_STATE_HOME="+t.TempDir())
+	var o, e bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &o, &e
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("analysis failed because of the database: %v", err)
+	}
+	if !strings.Contains(o.String(), "File identification") || !strings.Contains(e.String(), "warning: local database unavailable") {
+		t.Fatalf("stdout %.100s stderr %s", o.String(), e.String())
 	}
 }
