@@ -32,13 +32,13 @@ var optionalTools = []struct{ name, bin, role string }{
 	{"FLOSS", "floss", "obfuscated strings"},
 	{"Detect It Easy", "diec", "packer/compiler second opinion"},
 	{"ILSpy", "ilspycmd", ".NET decompilation"},
-	{"7-Zip", "7zz", "archive extraction"},
 	{"unblob", "unblob", "container extraction"},
 }
 
 // usedBy says what a detected tool is used for in this build.
 var usedBy = map[string]string{
 	"upx": "used by -u to unpack UPX",
+	"7zz": "used by -x for archives appended to executables",
 	"yr":  "used for signature scanning",
 }
 

@@ -146,7 +146,7 @@ Run 'unpackr doctor' to check the sandbox and optional tools.`,
 	f.BoolVarP(&fl.Deep, "deep", "d", false, "extended analysis (not implemented in this build)")
 	f.BoolVarP(&fl.Verbose, "verbose", "v", false, "show technical evidence")
 	f.BoolVarP(&fl.Unpack, "unpack", "u", false, "unpack supported packers (UPX) and analyse the result; needs upx installed")
-	f.BoolVarP(&fl.Extract, "extract", "x", false, "extract embedded content (PyInstaller bundles) without running it")
+	f.BoolVarP(&fl.Extract, "extract", "x", false, "extract embedded content (PyInstaller bundles; ZIP/RAR/7z/CAB archives appended to an executable, needs 7-Zip) without running it")
 	f.BoolVarP(&fl.Reverse, "reverse", "r", false, "use reverse-engineering integrations (not implemented in this build)")
 	f.BoolVarP(&fl.Compare, "compare", "c", false, "compare two files: header, sections, imports, entropy, packing, capabilities, indicators")
 	f.StringVarP(&fl.Output, "output", "o", "", "write a report; format inferred from the extension (.json .html .md .csv)")

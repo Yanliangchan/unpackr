@@ -41,7 +41,7 @@ A path may appear before or after flags. A file literally named `doctor`,
 | | `--no-banner`, `--banner SEL`, `--quiet`, `--no-color` | works | Presentation |
 | `-d` | `--deep` | works for x86/x86-64 | Everything `-i` does, plus a bounded linear disassembly of the executable sections that looks for three obfuscation idioms: PEB module walking, the ror-13 API-name hash loop and control-flow-flattening dispatchers. Other architectures are listed under `not_run` as skipped. See `docs/OBFUSCATION.md` |
 | `-u` | `--unpack` | works for UPX | Unpacks UPX-packed files with `upx -d` in a sandbox, validates, analyses and compares the result. Needs `upx` installed. Output goes to `<output-dir>/artifacts/` (default `./unpackr-out/artifacts/`) as `<sha256>.bin`, mode 0600. Other packers report `not-applicable` |
-| `-x` | `--extract` | works for PyInstaller | Extracts the bundle into `<output-dir>/artifacts/pyinstaller-<sha256 prefix>/` (default `./unpackr-out/`). Other files report `not-applicable` |
+| `-x` | `--extract` | works for PyInstaller and for ZIP/RAR/7z/CAB archives appended to an executable | Extracts into `<output-dir>/artifacts/pyinstaller-<sha256 prefix>/` or `.../overlay-<sha256 prefix>/` (default `./unpackr-out/`). Other files report `not-applicable` |
 | `-r` | `--reverse` | works for ELF and PE with radare2 | Asks radare2 (inside the sandbox) which functions reference the imported APIs behind each reported capability, how many functions it finds and which is largest. Without radare2 the run succeeds and `not_run` says so. See the `-r` section below |
 | `-c` | `--compare` | works | Exactly two files; shows header, section, import, export, entropy, packing, fingerprint, capability, indicator and string differences. `--format json` / `-o x.json` give the structured comparison |
 | `-h` | `--help` | works | |
@@ -103,8 +103,21 @@ banner: random
 
 ## Extraction policy
 
-- Only PyInstaller bundles are extracted. UNPACKR does not extract arbitrary
-  archives, resources or installers yet.
+- PyInstaller bundles are extracted by a native reader. A ZIP, RAR, 7z or CAB
+  archive that starts within the first 64 KiB of an executable's overlay (a
+  dropper's payload, a self-extractor's data) is extracted with a native 7-Zip
+  (`7zz`, or `7z` when it is the real executable; Debian's `/usr/bin/7z` is a
+  shell wrapper and is skipped in favour of `/usr/lib/7zip/7z`). UNPACKR does
+  not extract other archives, resources or installers yet.
+- 7-Zip runs in the same confinement as UPX (Landlock, seccomp, no network,
+  memory and time limits), on a copy of only the archive bytes. It lists the
+  archive first and refuses it when the listed file count or total size passes
+  `extract_max_entries` / `extract_max_mb`. The parent then rejects links and
+  special files, resets modes to 0600, and hashes every file itself.
+- Encrypted archives are reported, never guessed. If 7-Zip cannot extract some
+  entries (for example an unsupported RAR method) the rest are kept and the
+  failed ones are listed as skipped. The archive comment, where a WinRAR
+  self-extractor keeps its command script, is shown as a note.
 - The reader runs in a sandboxed worker whose only writable location is one
   private directory. The parent then re-verifies every file before storing it.
 - Entry names containing `..` or absolute paths are skipped with a reason, not
