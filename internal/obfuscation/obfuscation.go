@@ -171,7 +171,7 @@ func findDiff(data []byte) []models.DecodedString {
 			perMarker[md.name+m]++
 			// A recovered string starts at its marker and runs forward.
 			hi := i + len(m)
-			for hi < len(data) && hi-i < 512 && !(data[hi] == data[hi-1] && data[hi-1] == data[hi-2] && data[hi-2] == data[hi-3]) && printable(md.dec(data[hi], kb)) {
+			for hi < len(data) && hi-i < 512 && !paddingRun(data, hi) && printable(md.dec(data[hi], kb)) {
 				hi++
 			}
 			text := make([]byte, hi-i)
@@ -196,6 +196,12 @@ func findDiff(data []byte) []models.DecodedString {
 		}
 	}
 	return out
+}
+
+// paddingRun reports whether data[i] ends a run of four identical bytes, which
+// is how padding looks.
+func paddingRun(data []byte, i int) bool {
+	return i >= 3 && data[i] == data[i-1] && data[i-1] == data[i-2] && data[i-2] == data[i-3]
 }
 
 func distinct(b []byte) int {
