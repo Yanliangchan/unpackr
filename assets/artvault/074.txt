@@ -1,0 +1,14 @@
+---
+id: 074
+category: picture
+title: Disassembler robot
+style: ocean
+---
+          _____
+         /_____\
+        [| o o |]          I disassemble,
+         |  -  |           therefore I am.
+       __|_____|__
+      / |  ___  | \        push rbp
+     /__|_|___|_|__\       mov  rbp, rsp
+         |_|   |_|         ; ... and now I understand you

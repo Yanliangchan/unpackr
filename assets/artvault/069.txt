@@ -1,0 +1,14 @@
+---
+id: 069
+category: picture
+title: Ghost in .rdata
+style: plasma
+---
+            .-"""-.
+           / .===. \            BOO.
+           \/ 6 6 \/
+           ( \___/ )            strings found      : 4,096
+        ___ooo__V__ooo___       strings that matter: 3
+                                courage            : 0
+
+      the haunted house is always in .rdata

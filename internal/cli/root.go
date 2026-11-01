@@ -98,7 +98,11 @@ func (g *globals) maybeBanner(cmd *cobra.Command, cfg config.Config, machineOutp
 	artvault.RememberShown(state, b.ID)
 	st := terminal.Style{On: terminal.ColorEnabled(os.Stderr, g.noColor)}
 	p := func(format string, a ...any) { _, _ = fmt.Fprintf(os.Stderr, format, a...) }
-	p("\n%s\n\n", st.Cyan(b.Text()))
+	depth := artvault.DepthNone
+	if st.On {
+		depth = artvault.DetectDepth()
+	}
+	p("\n%s\n\n", artvault.Paint(b, "", depth))
 	p("%s %s  |  %s  |  offline  |  ArtVault #%s\n", st.Bold(version.Name), version.Version, version.Platform(), b.ID)
 	p("%s\n", st.Dim(version.Tagline+"  "+repeat("-", 30)))
 }
@@ -143,16 +147,16 @@ Run 'unpackr doctor' to check the sandbox and optional tools.`,
 	fl := &g.flags
 	f.BoolVarP(&fl.Info, "info", "i", false, "full static analysis")
 	f.BoolVarP(&fl.Quick, "quick", "q", false, "fast triage; accepts directories")
-	f.BoolVarP(&fl.Deep, "deep", "d", false, "extended analysis (not implemented in this build)")
+	f.BoolVarP(&fl.Deep, "deep", "d", false, "also look for obfuscation idioms by disassembling the code (x86 and x86-64)")
 	f.BoolVarP(&fl.Verbose, "verbose", "v", false, "show technical evidence")
 	f.BoolVarP(&fl.Unpack, "unpack", "u", false, "unpack supported packers (UPX) and analyse the result; needs upx installed")
-	f.BoolVarP(&fl.Extract, "extract", "x", false, "extract embedded content (PyInstaller bundles) without running it")
-	f.BoolVarP(&fl.Reverse, "reverse", "r", false, "use reverse-engineering integrations (not implemented in this build)")
+	f.BoolVarP(&fl.Extract, "extract", "x", false, "extract embedded content (PyInstaller bundles; ZIP/RAR/7z/CAB archives appended to an executable, needs 7-Zip) without running it")
+	f.BoolVarP(&fl.Reverse, "reverse", "r", false, "ask radare2 which functions call the imported APIs (ELF and PE; needs radare2)")
 	f.BoolVarP(&fl.Compare, "compare", "c", false, "compare two files: header, sections, imports, entropy, packing, capabilities, indicators")
 	f.StringVarP(&fl.Output, "output", "o", "", "write a report; format inferred from the extension (.json .html .md .csv)")
 	f.StringVar(&fl.Format, "format", "", "output format: terminal, json, html, markdown, csv (csv is the indicator list, or the summary table for several files)")
 	f.StringVar(&fl.OutputDir, "output-dir", "", "directory for per-file JSON reports in batch mode")
-	f.StringVar(&fl.Modules, "modules", "", "comma-separated modules to run (available: identification, structure)")
+	f.StringVar(&fl.Modules, "modules", "", "comma-separated modules to run (available: identification, structure, analysis)")
 	f.IntVar(&g.threads, "threads", 0, "concurrent analyses for batches (default from config)")
 	f.DurationVar(&g.timeout, "timeout", 0, "per-worker time limit, e.g. 90s (default from config)")
 	f.BoolVar(&g.offline, "offline", true, "never use the network (always true in this build)")

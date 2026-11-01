@@ -25,7 +25,7 @@ import (
 const TaskExtractPyInstaller = "extract-pyinstaller"
 
 // SupportedContainers lists what extraction handles in this build.
-var SupportedContainers = []string{"PyInstaller"}
+var SupportedContainers = []string{"PyInstaller", OverlayArchiveName}
 
 // ExtractParams configures the extraction worker.
 type ExtractParams struct {
@@ -83,6 +83,9 @@ func runExtract(ctx context.Context, f *os.File, size int64, rep *models.Report,
 		got.Entries = []models.ExtractedEntry{}
 	}
 	*ex = got
+	if ex.Status == "not-applicable" && runOverlay(ctx, f, size, rep, o, ex) {
+		return
+	}
 	if ex.Status != "extracted" {
 		return
 	}

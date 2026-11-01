@@ -65,11 +65,14 @@ func Parse(data []byte) (b *models.Binary, err error) {
 	var sizeOfHeaders uint32
 	var epRVA uint32
 	var clrRVA, clrSize uint32
+	var dirs [16]sw.DataDirectory
+	var imageSize uint32
 	switch oh := p.NtHeader.OptionalHeader.(type) {
 	case sw.ImageOptionalHeader64:
 		b.Format, b.Bits, b.ImageBase = "PE32+", 64, oh.ImageBase
 		epRVA, sizeOfHeaders = oh.AddressOfEntryPoint, oh.SizeOfHeaders
 		clrRVA, clrSize = oh.DataDirectory[14].VirtualAddress, oh.DataDirectory[14].Size
+		dirs, imageSize = oh.DataDirectory, oh.SizeOfImage
 		b.Attributes["subsystem"] = oh.Subsystem.String()
 		b.Attributes["dll_characteristics"] = strings.Join(oh.DllCharacteristics.String(), ",")
 		b.Attributes["linker_version"] = fmt.Sprintf("%d.%d", oh.MajorLinkerVersion, oh.MinorLinkerVersion)
@@ -79,6 +82,7 @@ func Parse(data []byte) (b *models.Binary, err error) {
 		b.Format, b.Bits, b.ImageBase = "PE32", 32, uint64(oh.ImageBase)
 		epRVA, sizeOfHeaders = oh.AddressOfEntryPoint, oh.SizeOfHeaders
 		clrRVA, clrSize = oh.DataDirectory[14].VirtualAddress, oh.DataDirectory[14].Size
+		dirs, imageSize = oh.DataDirectory, oh.SizeOfImage
 		b.Attributes["subsystem"] = oh.Subsystem.String()
 		b.Attributes["dll_characteristics"] = strings.Join(oh.DllCharacteristics.String(), ",")
 		b.Attributes["linker_version"] = fmt.Sprintf("%d.%d", oh.MajorLinkerVersion, oh.MinorLinkerVersion)
@@ -88,6 +92,19 @@ func Parse(data []byte) (b *models.Binary, err error) {
 		return nil, fmt.Errorf("%w: unexpected optional header type %T", ErrNotPE, oh)
 	}
 	b.Endian = "little"
+	// A data directory that lies outside the image cannot be read by the loader
+	// either; ordinary toolchains never produce one. (The certificate table,
+	// index 4, is a file offset, not an RVA, and is not checked here.)
+	for i, d := range dirs {
+		// Skipped: the certificate table (a file offset, not an RVA), the reserved
+		// entry (the parser reports it separately), and entries with no address.
+		if i == 4 || i == 15 || d.VirtualAddress == 0 || imageSize == 0 {
+			continue
+		}
+		if uint64(d.VirtualAddress) >= uint64(imageSize) || uint64(d.VirtualAddress)+uint64(d.Size) > uint64(imageSize) {
+			b.Anomalies = append(b.Anomalies, fmt.Sprintf("Data directory %s (RVA 0x%x, size 0x%x) lies outside the image (SizeOfImage 0x%x)", dirName(i), d.VirtualAddress, d.Size, imageSize))
+		}
+	}
 	b.Arch = archName(uint16(p.NtHeader.FileHeader.Machine), p.NtHeader.FileHeader.Machine.String())
 	switch {
 	case p.IsDriver():
@@ -144,7 +161,7 @@ func Parse(data []byte) (b *models.Binary, err error) {
 				b.Anomalies = append(b.Anomalies, fmt.Sprintf("import list truncated at %d functions", MaxImportFunctions))
 				break
 			}
-			out.Functions = append(out.Functions, models.ImportFn{Name: f.Name, Ordinal: f.Ordinal, ByOrdinal: f.ByOrdinal, Hint: f.Hint})
+			out.Functions = append(out.Functions, models.ImportFn{Name: f.Name, Ordinal: f.Ordinal, ByOrdinal: f.ByOrdinal, Hint: f.Hint, IATRVA: f.ThunkRVA})
 		}
 		b.Imports = append(b.Imports, out)
 		if total > MaxImportFunctions {
@@ -324,4 +341,12 @@ func addManagedImports(b *models.Binary, dn *models.DotNet) {
 		}
 		b.Imports = append(b.Imports, im)
 	}
+}
+
+func dirName(i int) string {
+	names := []string{"export", "import", "resource", "exception", "certificate", "base relocation", "debug", "architecture", "global pointer", "TLS", "load configuration", "bound import", "IAT", "delay import", "CLR runtime", "reserved"}
+	if i >= 0 && i < len(names) {
+		return names[i]
+	}
+	return fmt.Sprint(i)
 }

@@ -1,0 +1,13 @@
+---
+id: 065
+category: picture
+title: Rubber duck debugger
+style: gold
+---
+                 __
+             ___( o)>        "Explain the control-flow graph to the duck.
+             \ <_. )          If the duck is confused, so is the packer."
+              `---'
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+                    rubber duck debugging, offline edition

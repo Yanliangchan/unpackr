@@ -121,3 +121,76 @@ func TestAtLeastSixtyBuiltInBanners(t *testing.T) {
 		t.Fatalf("%d built-in banners, want at least 60", n)
 	}
 }
+
+func stripANSI(s string) string {
+	var out strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == 0x1b {
+			for i < len(s) && s[i] != 'm' {
+				i++
+			}
+			continue
+		}
+		out.WriteByte(s[i])
+	}
+	return out.String()
+}
+
+func TestPaintKeepsTheArtworkIntactAtEveryDepth(t *testing.T) {
+	v := builtin(t)
+	for _, b := range v.All() {
+		if b.Text() != Paint(b, "", DepthNone) {
+			t.Fatalf("%s changed without colour", b.ID)
+		}
+		for _, d := range []Depth{DepthBasic, Depth256, DepthTrue} {
+			p := Paint(b, "", d)
+			if stripANSI(p) != b.Text() {
+				t.Fatalf("%s depth %d: colour changed the artwork", b.ID, d)
+			}
+			if !strings.Contains(p, "\x1b[") {
+				t.Fatalf("%s depth %d: nothing was coloured", b.ID, d)
+			}
+			for _, l := range strings.Split(p, "\n") {
+				if strings.Contains(l, "\x1b[") && !strings.HasSuffix(l, "\x1b[0m") {
+					t.Fatalf("%s: a line leaves colour switched on: %q", b.ID, l)
+				}
+			}
+		}
+	}
+}
+
+func TestEveryStyleWorksAndUnknownOnesFallBack(t *testing.T) {
+	b := Banner{ID: "x", Category: "picture", Lines: []string{"ab", "cd", "ef"}}
+	for _, name := range StyleNames() {
+		if p := Paint(b, name, DepthTrue); stripANSI(p) != b.Text() || !strings.Contains(p, "38;2;") {
+			t.Errorf("%s: %q", name, p)
+		}
+	}
+	if b.EffectiveStyle() != "rainbow" {
+		t.Fatalf("category default: %s", b.EffectiveStyle())
+	}
+	b.Style = "nonsense"
+	if b.EffectiveStyle() != "rainbow" {
+		t.Fatal("an unknown style must fall back, not break")
+	}
+	b.Custom = true
+	if b.EffectiveStyle() != "cyan" {
+		t.Fatal("custom artwork keeps its plain colour unless it names a style")
+	}
+}
+
+func TestDetectDepth(t *testing.T) {
+	t.Setenv("COLORTERM", "truecolor")
+	if DetectDepth() != DepthTrue {
+		t.Fatal("truecolor")
+	}
+	t.Setenv("COLORTERM", "")
+	t.Setenv("TERM", "xterm-256color")
+	if DetectDepth() != Depth256 {
+		t.Fatal("256")
+	}
+	t.Setenv("TERM", "vt100")
+	if DetectDepth() != DepthBasic {
+		t.Fatal("basic")
+	}
+}

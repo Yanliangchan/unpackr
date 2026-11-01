@@ -586,7 +586,7 @@ func TestSampleMemoryAndCasesThroughTheCLI(t *testing.T) {
 	}
 
 	// Database file permissions and stats.
-	db := filepath.Join(dataDir(t), "unpackr", "db.sqlite")
+	db := filepath.Join(dataDir(t), "unpackr", "db.json")
 	if st, err := os.Stat(db); err != nil || st.Mode().Perm() != 0o600 {
 		t.Fatalf("database file: %v %v", st, err)
 	}
@@ -645,7 +645,7 @@ func TestNoDBLeavesNothingBehind(t *testing.T) {
 	if r := run(t, "-i", p, "--no-banner"); r.code != 0 {
 		t.Fatal(r.stderr)
 	}
-	if _, err := os.Stat(filepath.Join(dataDir(t), "unpackr", "db.sqlite")); err != nil {
+	if _, err := os.Stat(filepath.Join(dataDir(t), "unpackr", "db.json")); err != nil {
 		t.Fatal("the database should be created by default")
 	}
 }
@@ -659,7 +659,7 @@ func TestDatabaseFailureNeverBlocksAnalysis(t *testing.T) {
 	// A database path that cannot be created (its parent is a file).
 	blocker := filepath.Join(t.TempDir(), "file")
 	_ = os.WriteFile(blocker, []byte("x"), 0o600)
-	_ = os.WriteFile(filepath.Join(cfg, "unpackr", "config.yaml"), []byte("database_path: "+filepath.Join(blocker, "db.sqlite")+"\n"), 0o600)
+	_ = os.WriteFile(filepath.Join(cfg, "unpackr", "config.yaml"), []byte("database_path: "+filepath.Join(blocker, "db.json")+"\n"), 0o600)
 	cmd := exec.Command(bin, "-i", p, "--no-banner")
 	cmd.Env = append(os.Environ(), "XDG_CONFIG_HOME="+cfg, "XDG_STATE_HOME="+t.TempDir())
 	var o, e bytes.Buffer

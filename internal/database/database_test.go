@@ -2,12 +2,14 @@ package database
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Yanliangchan/unpackr/internal/similarity"
 	"github.com/Yanliangchan/unpackr/pkg/models"
@@ -15,7 +17,7 @@ import (
 
 func open(t *testing.T) *DB {
 	t.Helper()
-	d, err := Open(filepath.Join(t.TempDir(), "sub", "db.sqlite"))
+	d, err := Open(filepath.Join(t.TempDir(), "sub", "db.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +47,7 @@ func report(sha, name, version, pack string, indicators ...string) *models.Repor
 func sha(c string) string { return strings.Repeat(c, 64) }
 
 func TestOpenCreatesPrivateFileAndMigratesOnce(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "d", "db.sqlite")
+	p := filepath.Join(t.TempDir(), "d", "db.json")
 	d, err := Open(p)
 	if err != nil {
 		t.Fatal(err)
@@ -71,9 +73,8 @@ func TestOpenCreatesPrivateFileAndMigratesOnce(t *testing.T) {
 
 func TestNewerSchemaIsRefused(t *testing.T) {
 	d := open(t)
-	if _, err := d.SQL().Exec("PRAGMA user_version = 99"); err != nil {
-		t.Fatal(err)
-	}
+	d.ix.Version = 99
+	d.Touch()
 	p := d.Path()
 	_ = d.Close()
 	if _, err := Open(p); err == nil || !strings.Contains(err.Error(), "newer version") {
@@ -158,7 +159,7 @@ func TestFeaturesAndPivots(t *testing.T) {
 	}
 }
 
-func TestSQLInjectionIsInert(t *testing.T) {
+func TestHostileValuesAreInert(t *testing.T) {
 	d := open(t)
 	if err := d.Record(report(sha("a"), "a.exe", "1", "unpacked", "x.example.com")); err != nil {
 		t.Fatal(err)
@@ -227,11 +228,11 @@ func TestForgetRemovesDerivedData(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatal(ok, err)
 	}
-	for _, q := range []string{"SELECT count(*) FROM analyses", "SELECT count(*) FROM features", "SELECT count(*) FROM samples"} {
-		var n int
-		if err := d.SQL().QueryRow(q).Scan(&n); err != nil || n != 0 {
-			t.Fatalf("%s: %d %v", q, n, err)
-		}
+	if n := len(d.ix.Analyses) + len(d.ix.Features) + len(d.ix.Samples); n != 0 {
+		t.Fatalf("data left behind: %+v", d.ix)
+	}
+	if ents, _ := os.ReadDir(d.reportsDir()); len(ents) != 0 {
+		t.Fatalf("report files left behind: %v", ents)
 	}
 	if ok, _ := d.Forget(sha("a")); ok {
 		t.Fatal("forgetting twice should report nothing removed")
@@ -241,7 +242,8 @@ func TestForgetRemovesDerivedData(t *testing.T) {
 func TestCorruptStoredReportIsAnErrorNotAPanic(t *testing.T) {
 	d := open(t)
 	_ = d.Record(report(sha("a"), "a.exe", "1", "unpacked"))
-	if _, err := d.SQL().Exec("UPDATE analyses SET report_gz = x'0102030405'"); err != nil {
+	p, _ := d.reportPath(sha("a"), d.ix.Analyses[sha("a")][0].ID)
+	if err := os.WriteFile(p, []byte{1, 2, 3, 4, 5}, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.LoadReport(sha("a")); err == nil {
@@ -340,13 +342,67 @@ func TestSimilarRanksCloseSamplesFirst(t *testing.T) {
 func TestSimilarSurvivesGarbageInTheStore(t *testing.T) {
 	d := open(t)
 	_ = d.Record(fuzzyReport(sha("b"), "b.exe", block(5, 5000), []string{"a"}))
-	if _, err := d.SQL().Exec("UPDATE features SET value = 'T1zzzz' WHERE kind = 'tlsh'"); err != nil {
-		t.Fatal(err)
+	for i, f := range d.ix.Features[sha("b")] {
+		if f[0] == "tlsh" {
+			d.ix.Features[sha("b")][i][1] = "T1zzzz"
+		}
 	}
-	if _, err := d.SQL().Exec("INSERT INTO features(sha256, kind, value) VALUES (?, 'ssdeep', ?)", sha("b"), "garbage:::"); err != nil {
-		t.Fatal(err)
-	}
+	d.ix.Features[sha("b")] = append(d.ix.Features[sha("b")], [2]string{"ssdeep", "garbage:::"})
 	if _, err := d.Similar(fuzzyReport(sha("a"), "a.exe", block(6, 5000), nil), 5); err != nil {
 		t.Fatalf("malformed stored hashes must be ignored, not fatal: %v", err)
+	}
+}
+
+func TestChangesSurviveReopenAndSecondProcessWaits(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "db.json")
+	d, err := Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Record(report(sha("a"), "a.exe", "1", "unpacked", "kept.example.com")); err != nil {
+		t.Fatal(err)
+	}
+	// While the first handle is open a second one must not slip in.
+	if lk, err := lockFile(p+".lock", 100*time.Millisecond); err == nil {
+		lk.unlock()
+		t.Fatal("the store was not locked")
+	} else if !errors.Is(err, ErrBusy) {
+		t.Fatalf("want ErrBusy, got %v", err)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+	d2, err := Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d2.Close() //nolint:errcheck // test
+	refs, _ := d2.Find("ioc", "kept.example.com")
+	if len(refs) != 1 {
+		t.Fatalf("record lost across reopen: %v", refs)
+	}
+	if _, err := d2.LoadReport(sha("a")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDamagedIndexIsRefusedNotOverwritten(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "db.json")
+	if err := os.WriteFile(p, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(p); err == nil {
+		t.Fatal("damaged index accepted")
+	}
+	if b, _ := os.ReadFile(p); string(b) != "{not json" {
+		t.Fatalf("a damaged index must be left for the user to inspect, got %q", b)
+	}
+}
+
+func TestReportsAreNotWrittenUnderForgedHashes(t *testing.T) {
+	d := open(t)
+	r := report("../../etc/x", "a.exe", "1", "unpacked")
+	if err := d.Record(r); err == nil {
+		t.Fatal("a path-like hash was accepted")
 	}
 }

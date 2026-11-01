@@ -65,6 +65,12 @@ var ToolNames = []string{"radare2", "r2"}
 type API struct {
 	Name    string
 	Library string // PE only
+	// VA is the virtual address of the import's slot in the import address
+	// table (PE only). When known it is used instead of the name: it does not
+	// depend on radare2 having parsed the import directory, which a hostile file
+	// can break, and it is built from an integer, so no text from the file is
+	// placed in a command.
+	VA uint64
 }
 
 var (
@@ -78,6 +84,9 @@ var (
 // safe to put in a command. The flag names are radare2's: ELF imports are
 // sym.imp.NAME and PE imports sym.imp.LIB.dll_NAME.
 func flagFor(a API, family string) (string, bool) {
+	if family == "pe" && a.VA != 0 {
+		return fmt.Sprintf("0x%x", a.VA), true
+	}
 	if !reSafeName.MatchString(a.Name) {
 		return "", false
 	}
@@ -103,7 +112,11 @@ func script(flags []string, token string) string {
 	var b strings.Builder
 	// The sandbox setting goes on after the sample is open: set earlier, radare2
 	// cannot open the file at all.
-	b.WriteString("e cfg.sandbox=true;aa;" + m("I") + ";iIj;" + m("E") + ";iej;" + m("F") + ";afl")
+	// "aa" alone follows only the entry point and named symbols: on a stripped
+	// program it finds a handful of functions (2 in a 656 KB sample where "aa;aac"
+	// finds 1,092). "aac" adds functions reached by calls. "aaa" finds the same
+	// functions and is several times slower.
+	b.WriteString("e cfg.sandbox=true;aa;aac;" + m("I") + ";iIj;" + m("E") + ";iej;" + m("F") + ";afl")
 	for i, f := range flags {
 		fmt.Fprintf(&b, ";%s;axtj %s", m(fmt.Sprintf("X%d", i)), f)
 	}
@@ -212,10 +225,113 @@ func Run(ctx context.Context, t *unpacking.Tool, sample io.Reader, family string
 		res.Truncated = true
 		res.Notes = append(res.Notes, "radare2's output was cut at 1 MiB, so the function list may be incomplete")
 	}
-	if err := parse(res, run.Stdout, token, used, flags); err != nil {
+	sizes, err := parse(res, run.Stdout, token, used, flags)
+	if err != nil {
 		return nil, err
 	}
+	if err := followThunks(ctx, t, spec, work, target, o, res, sizes); err != nil {
+		res.Notes = append(res.Notes, "the second stage (callers of import stubs) failed: "+firstLine(err.Error()))
+	}
 	return res, nil
+}
+
+// maxThunkSize is the largest function treated as an import stub: a jump
+// through the table is 6 bytes on x86, and a few more with padding.
+const maxThunkSize = 16
+
+// maxThunks bounds the second stage.
+const maxThunks = 80
+
+// followThunks finds who calls the stubs that the first stage found. A
+// reference to an imported API from a function of at most maxThunkSize bytes is
+// the stub itself, so the interesting caller is one step further out. The
+// lookup uses the stub's address, an integer we format, so nothing from the file
+// reaches the command.
+func followThunks(ctx context.Context, t *unpacking.Tool, base worker.ExecSpec, work, target string, o Options, res *models.Reverse, sizes map[uint64]int) error {
+	type stub struct {
+		api  API
+		va   uint64
+		orig int
+	}
+	var stubs []stub
+	seen := map[uint64]bool{}
+	for i, c := range res.CallSites {
+		if c.Kind == "call" || c.FuncVA == 0 || seen[c.FuncVA] {
+			continue
+		}
+		if sz, ok := sizes[c.FuncVA]; !ok || sz > maxThunkSize {
+			continue
+		}
+		seen[c.FuncVA] = true
+		stubs = append(stubs, stub{api: API{Name: c.API, Library: c.Library}, va: c.FuncVA, orig: i})
+		if len(stubs) >= maxThunks {
+			break
+		}
+	}
+	if len(stubs) == 0 {
+		return nil
+	}
+	token, err := newToken()
+	if err != nil {
+		return err
+	}
+	var b strings.Builder
+	b.WriteString("e cfg.sandbox=true;aa;aac")
+	for i, s := range stubs {
+		fmt.Fprintf(&b, ";?e %s;axtj 0x%x", marker(token, fmt.Sprintf("T%d", i)), s.va)
+	}
+	args := []string{"-q", "-N", "-e", "scr.color=0", "-e", "scr.interactive=false", "-e", "bin.cache=true", "-c", b.String(), target}
+	spec := t.Spec(work, args, o.MemoryBytes, 1<<20)
+	spec.ReadOnly = base.ReadOnly
+	run, err := worker.RunExec(ctx, spec, o.Timeout)
+	if err != nil {
+		return err
+	}
+	if run.ExitCode != 0 {
+		return fmt.Errorf("radare2 exited with status %d", run.ExitCode)
+	}
+	parts := split(run.Stdout, token)
+	for i, s := range stubs {
+		js := lastJSON(parts[fmt.Sprintf("T%d", i)])
+		if js == "" {
+			continue
+		}
+		var refs []struct {
+			From    uint64 `json:"from"`
+			Type    string `json:"type"`
+			FcnAddr uint64 `json:"fcn_addr"`
+			FcnName string `json:"fcn_name"`
+			Name    string `json:"name"`
+		}
+		if json.Unmarshal([]byte(js), &refs) != nil {
+			continue
+		}
+		kept := 0
+		for _, r := range refs {
+			if r.Type != "CALL" && r.Type != "CODE" {
+				continue
+			}
+			if kept >= maxPerAPI || len(res.CallSites) >= MaxCallSites {
+				break
+			}
+			where := r.FcnName
+			if where == "" {
+				where = r.Name
+			}
+			res.CallSites = append(res.CallSites, models.ReverseCall{
+				API: s.api.Name, Library: s.api.Library, Function: textutil.Sanitize(clip(strings.TrimPrefix(where, "sym."), 120)),
+				FuncVA: r.FcnAddr, At: r.From, Kind: "call", ViaThunk: true,
+			})
+			kept++
+		}
+	}
+	sort.SliceStable(res.CallSites, func(i, j int) bool {
+		if res.CallSites[i].API != res.CallSites[j].API {
+			return res.CallSites[i].API < res.CallSites[j].API
+		}
+		return res.CallSites[i].At < res.CallSites[j].At
+	})
+	return nil
 }
 
 // split cuts the output at the marker lines. A marker is a whole line carrying
@@ -260,10 +376,10 @@ func lastJSON(s string) string {
 	return ""
 }
 
-func parse(res *models.Reverse, out, token string, used []API, flags []string) error {
+func parse(res *models.Reverse, out, token string, used []API, flags []string) (map[uint64]int, error) {
 	parts := split(out, token)
 	if _, ok := parts["F"]; !ok {
-		return errors.New("unexpected radare2 output: the function listing is missing")
+		return nil, errors.New("unexpected radare2 output: the function listing is missing")
 	}
 
 	// Functions: "0x... nbbs size name" per line.
@@ -299,6 +415,10 @@ func parse(res *models.Reverse, out, token string, used []API, flags []string) e
 		fns = append(fns, fn{va, nb, sz, textutil.Sanitize(clip(strings.Join(f[3:], " "), 120))})
 	}
 	res.Functions = len(fns)
+	sizes := make(map[uint64]int, len(fns))
+	for _, f := range fns {
+		sizes[f.va] = f.sz
+	}
 
 	// Entry point: the function that starts at the first entry address.
 	if js := lastJSON(parts["E"]); js != "" {
@@ -367,7 +487,7 @@ func parse(res *models.Reverse, out, token string, used []API, flags []string) e
 		}
 		return res.CallSites[i].At < res.CallSites[j].At
 	})
-	return nil
+	return sizes, nil
 }
 
 func clip(s string, n int) string {

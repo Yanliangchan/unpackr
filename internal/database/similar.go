@@ -17,6 +17,9 @@ type SimilarHit struct {
 // maxStructural bounds how many candidates have their full report loaded.
 const maxStructural = 200
 
+// maxPivotMatches bounds the samples taken from one shared pivot value.
+const maxPivotMatches = 500
+
 // Similar ranks stored samples by resemblance to rep. Fuzzy hashes are
 // compared with every stored sample (cheap, in memory); the structural
 // overlap needs the stored report, so it is computed for the closest
@@ -38,33 +41,29 @@ func (d *DB) Similar(rep *models.Report, limit int) ([]SimilarHit, error) {
 		}
 		return c
 	}
-	rows, err := d.sql.Query("SELECT sha256, kind, value FROM features WHERE kind IN ('tlsh','ssdeep') AND sha256 != ?", self)
-	if err != nil {
-		return nil, err
-	}
 	var myT, myS string
 	if rep.Analysis != nil {
 		myT, myS = rep.Analysis.Fuzzy.TLSH, rep.Analysis.Fuzzy.SSDeep
 	}
-	for rows.Next() {
-		var sha, kind, val string
-		if err := rows.Scan(&sha, &kind, &val); err != nil {
-			_ = rows.Close()
-			return nil, err
+	for sha, fs := range d.ix.Features {
+		if sha == self {
+			continue
 		}
-		c := get(sha)
-		switch kind {
-		case "tlsh":
-			if dist, ok := similarity.DiffTLSH(myT, val); ok {
-				c.dist, c.hasT = dist, true
-			}
-		case "ssdeep":
-			if sc, ok := similarity.CompareSSDeep(myS, val); ok && sc > 0 {
-				c.score, c.hasS = sc, true
+		for _, f := range fs {
+			switch f[0] {
+			case "tlsh":
+				c := get(sha)
+				if dist, ok := similarity.DiffTLSH(myT, f[1]); ok {
+					c.dist, c.hasT = dist, true
+				}
+			case "ssdeep":
+				c := get(sha)
+				if sc, ok := similarity.CompareSSDeep(myS, f[1]); ok && sc > 0 {
+					c.score, c.hasS = sc, true
+				}
 			}
 		}
 	}
-	_ = rows.Close()
 
 	// Samples sharing a pivot value are candidates whatever their hashes say.
 	pivots := map[string]bool{"imphash": true, "section-layout": true, "host": true, "packer": false}
@@ -72,20 +71,26 @@ func (d *DB) Similar(rep *models.Report, limit int) ([]SimilarHit, error) {
 		if !pivots[f[0]] {
 			continue
 		}
-		pr, err := d.sql.Query("SELECT sha256 FROM features WHERE kind = ? AND value = ? AND sha256 != ? LIMIT 500", f[0], f[1], self)
-		if err != nil {
-			return nil, err
-		}
-		for pr.Next() {
-			var sha string
-			if err := pr.Scan(&sha); err != nil {
-				_ = pr.Close()
-				return nil, err
+		var matched []string
+		for sha, fs := range d.ix.Features {
+			if sha == self {
+				continue
 			}
+			for _, g := range fs {
+				if g == f {
+					matched = append(matched, sha)
+					break
+				}
+			}
+		}
+		sort.Strings(matched)
+		if len(matched) > maxPivotMatches {
+			matched = matched[:maxPivotMatches]
+		}
+		for _, sha := range matched {
 			c := get(sha)
 			c.shared = append(c.shared, f[0])
 		}
-		_ = pr.Close()
 	}
 
 	var list []*cand
