@@ -13,6 +13,7 @@ unpackr db path | stats | find <value> [--kind K] | forget <sha256>
 unpackr case new|list|add|note|search|timeline|close|reopen|report
 unpackr similar <file|sha256-prefix> [--limit N] [-v]
 unpackr inspect <file | report.json>
+unpackr yara suggest <file> [--against DIR]... [-o rule.yar] | test <rule.yar> [--sample F] [--against DIR]...
 unpackr completion bash|zsh|fish
 unpackr --version
 ```
@@ -172,3 +173,37 @@ cite an evidence row, esc clears a search or filter, `?` help, `q` quit.
 - On a terminal that does not answer the colour query, starting `inspect` can
   pause for a few seconds; this comes from the UI library's start-up probe and
   only affects this command.
+
+## yara
+
+`unpackr yara suggest <file>` analyses the file and drafts a candidate rule, then
+tests it. `unpackr yara test <rule.yar>` tests any rule.
+
+**What goes into a draft**, best first: strings recovered from an encoded form
+(written with YARA's `xor` modifier, which matches them under any single-byte
+key), indicators (URLs, domains, public IPs, registry persistence paths,
+commands), and long unusual strings. Strings that look like compiler, runtime or
+system boilerplate are left out and listed with the reason (`-v` shows all). If
+there is anything specific, only specific features are used: padding a rule with
+ordinary strings made an earlier version match clean files built with the same
+compiler. With nothing specific the draft needs at least three ordinary strings,
+otherwise nothing is written ("No rule drafted"). A PE or ELF header check and a
+size limit (twice the sample's size, rounded up) are added. `--imphash` adds a
+PE import-hash alternative and warns that it is broad. The rule is marked
+`status = "experimental"`; it is never loaded as a built-in rule, and rules you
+load yourself are shown in reports but never counted as evidence.
+
+**What is tested** (by YARA-X inside the sandbox): that the rule compiles; that it
+matches the sample; and, with `--against DIR` (repeatable), how many files in a
+directory of known-clean files it also matches. Control files are read in place,
+read-only, and never copied or run. A rule that matches clean files, misses its
+own sample, or fails to compile exits non-zero. Without `--against` the output
+says the false-positive risk is unknown. Passing a clean-file test lowers that
+risk; it does not remove it.
+
+**Limits.** Strings come from the first 3,000 extracted strings plus all
+indicators and recovered strings. ADD-encoded and multi-byte-key strings cannot be
+written as YARA modifiers and are listed as left out. A rule built from a
+packed sample describes the packer, so unpack first (`-u`). Without `yr` installed
+the rule is drafted but reported as not compiled or tested. `-o` never overwrites
+an existing file.

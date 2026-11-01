@@ -159,7 +159,7 @@ Run 'unpackr doctor' to check the sandbox and optional tools.`,
 	f.BoolVar(&g.noDB, "no-db", false, "do not read or write the local sample database")
 	f.BoolVar(&g.requireSB, "require-sandbox", false, "refuse to analyse unless workers are fully sandboxed")
 
-	root.AddCommand(newDoctorCmd(g), newArtCmd(g), newDBCmd(g), newCaseCmd(g), newSimilarCmd(g), newInspectCmd(g))
+	root.AddCommand(newDoctorCmd(g), newArtCmd(g), newDBCmd(g), newCaseCmd(g), newSimilarCmd(g), newInspectCmd(g), newYaraCmd(g))
 	root.AddCommand(newGenCmd(g, root))
 	return root
 }
