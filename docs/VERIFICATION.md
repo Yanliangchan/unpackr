@@ -237,3 +237,28 @@ executable (`unpackr-inspect`) and enforce that with a boundary test
 (`TestMainBinaryDoesNotLinkTheTerminalUI`). The v2 line, which the plan said to
 check, is noted in the library's own source as removing this workaround; it was
 not evaluated here.
+
+## Addendum: clean-install verification of the .deb
+
+`packaging/verify-install.sh` installs the package with `apt` into a clean
+container and checks: checksum, installation with no other packages, both
+binaries, static linking, `--version`, `doctor`, info/quick/deep analysis of a
+real system executable, an HTML report, the polite refusal of `inspect` without a
+terminal, that sandbox status is stated, the man page (roff lint with `mandoc`
+plus section check), the three completion files, the licence and notices, and
+clean removal.
+
+Run locally on amd64 against `kalilinux/kali-rolling`, `ubuntu:24.04`,
+`ubuntu:22.04` and `debian:12`: all checks pass, and `doctor` reports full
+confinement (Landlock ABI 7, seccomp, no_new_privs) inside the containers.
+Two things the script taught: minimised container images tell dpkg to skip man
+pages and docs (the script lifts that, because it is a property of the image),
+and `man` itself is a stub in the Ubuntu image (the page is checked with
+`mandoc` instead).
+
+The CI `package` job runs the same script on a native amd64 runner and a native
+arm64 runner, which is the only place the arm64 package is executed; no
+emulation is available where this was developed. Not verified: Kali on real
+hardware or a virtual machine, installation through a Kali ISO or repository
+mirror, and `apt` dependency behaviour on release candidates of those
+distributions.
