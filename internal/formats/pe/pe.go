@@ -161,7 +161,7 @@ func Parse(data []byte) (b *models.Binary, err error) {
 				b.Anomalies = append(b.Anomalies, fmt.Sprintf("import list truncated at %d functions", MaxImportFunctions))
 				break
 			}
-			out.Functions = append(out.Functions, models.ImportFn{Name: f.Name, Ordinal: f.Ordinal, ByOrdinal: f.ByOrdinal, Hint: f.Hint})
+			out.Functions = append(out.Functions, models.ImportFn{Name: f.Name, Ordinal: f.Ordinal, ByOrdinal: f.ByOrdinal, Hint: f.Hint, IATRVA: f.ThunkRVA})
 		}
 		b.Imports = append(b.Imports, out)
 		if total > MaxImportFunctions {

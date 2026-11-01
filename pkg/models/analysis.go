@@ -287,5 +287,9 @@ type ReverseCall struct {
 	FuncVA   uint64 `json:"function_va,omitempty"`
 	At       uint64 `json:"at_va"`
 	Kind     string `json:"kind"` // call | jump | data
+	// ViaThunk is set when the reference reaches the API through a small stub
+	// function (Delphi and some linkers call imports through a table of
+	// one-instruction jump stubs); Function is then the caller of the stub.
+	ViaThunk bool   `json:"via_thunk,omitempty"`
 	Evidence string `json:"evidence,omitempty"`
 }

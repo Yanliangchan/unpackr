@@ -77,6 +77,9 @@ type ImportFn struct {
 	Ordinal   uint32 `json:"ordinal,omitempty"`
 	ByOrdinal bool   `json:"by_ordinal,omitempty"`
 	Hint      uint16 `json:"hint,omitempty"`
+	// IATRVA is the address of this import's slot in the import address table
+	// (PE only): where calls through the table read the function pointer.
+	IATRVA uint32 `json:"iat_rva,omitempty"`
 }
 
 // Export is one exported symbol.

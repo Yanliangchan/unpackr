@@ -155,7 +155,7 @@ var sampleOutput = "\x1b[2K" + mk("I") + "\n{\"arch\":\"x86\"}\n" + mk("E") + "\
 
 func TestParseIsStrictAndBounded(t *testing.T) {
 	res := newResult()
-	if err := parse(res, sampleOutput, tok, []API{{Name: "socket"}, {Name: "connect"}}, []string{"sym.imp.socket", "sym.imp.connect"}); err != nil {
+	if _, err := parse(res, sampleOutput, tok, []API{{Name: "socket"}, {Name: "connect"}}, []string{"sym.imp.socket", "sym.imp.connect"}); err != nil {
 		t.Fatal(err)
 	}
 	if res.Functions != 3 || res.Entry != "entry0" {
@@ -177,13 +177,13 @@ func TestParseIsStrictAndBounded(t *testing.T) {
 	if res.CallSites[0].Function != "main" {
 		t.Errorf("the sym. prefix should be dropped: %+v", res.CallSites[0])
 	}
-	if err := parse(newResult(), "no markers at all", tok, nil, nil); err == nil {
+	if _, err := parse(newResult(), "no markers at all", tok, nil, nil); err == nil {
 		t.Error("output without a function listing must be an error")
 	}
 	// Control characters in names are neutralised.
 	evil := mk("F") + "\n0x00001000 1 10 sym.\x1b]0;owned\x07name\n" + mk("I") + "\n" + mk("E") + "\n[]\n"
 	r := newResult()
-	if err := parse(r, evil, tok, nil, nil); err != nil {
+	if _, err := parse(r, evil, tok, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(r.Largest) == 1 && strings.ContainsAny(r.Largest[0].Name, "\x1b\x07") {
@@ -192,7 +192,22 @@ func TestParseIsStrictAndBounded(t *testing.T) {
 	// A name inside the file cannot fake a section break: markers carry this run's token.
 	forged := mk("F") + "\n0x00001000 1 10 real\n0x00001010 1 10 UNPACKR0000000000000000ENDX0\n" + mk("E") + "\n[]\n"
 	r2 := newResult()
-	if err := parse(r2, forged, tok, nil, nil); err != nil || r2.Functions != 2 {
+	if _, err := parse(r2, forged, tok, nil, nil); err != nil || r2.Functions != 2 {
 		t.Errorf("a forged marker must be an ordinary (odd) name, not a section break: %v %+v", err, r2)
+	}
+}
+
+// Found on a real banking trojan whose import directory is deliberately broken:
+// radare2 saw no imports at all, so name-based lookups found no call sites,
+// while the PE parser had recovered every import and its table address.
+func TestPEImportsAreLookedUpByTableAddressWhenKnown(t *testing.T) {
+	if f, ok := flagFor(API{Name: "x; !id", Library: "a b", VA: 0x140008188}, "pe"); !ok || f != "0x140008188" {
+		t.Errorf("address lookup = %q %v (the address is built from an integer, so hostile names are irrelevant)", f, ok)
+	}
+	if _, ok := flagFor(API{Name: "ok", Library: "KERNEL32.dll"}, "pe"); !ok {
+		t.Error("name lookup should still work without an address")
+	}
+	if f, _ := flagFor(API{Name: "socket", VA: 0x1000}, "elf"); f != "sym.imp.socket" {
+		t.Errorf("ELF does not use addresses: %q", f)
 	}
 }

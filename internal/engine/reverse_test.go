@@ -160,3 +160,12 @@ func machoHeader() []byte {
 	copy(h, []byte{0xCF, 0xFA, 0xED, 0xFE, 0x07, 0x00, 0x00, 0x01, 0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00})
 	return h
 }
+
+func TestReverseTargetsCarryTheImportTableAddress(t *testing.T) {
+	b := &models.Binary{Format: "PE32", ImageBase: 0x400000, Imports: []models.Import{{Library: "KERNEL32.dll", Functions: []models.ImportFn{{Name: "CreateProcessA", IATRVA: 0x2010}}}}}
+	caps := []models.Capability{{Severity: models.SeverityHigh, Chain: []models.ChainStep{{Source: "imported", APIs: []string{"CreateProcessA"}}}}}
+	got := reverseTargets(b, caps)
+	if len(got) != 1 || got[0].VA != 0x402010 || got[0].Library != "KERNEL32.dll" {
+		t.Errorf("%+v", got)
+	}
+}

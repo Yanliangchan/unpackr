@@ -94,12 +94,21 @@ func reverseTargets(b *models.Binary, caps []models.Capability) []reverse.API {
 	if b == nil {
 		return nil
 	}
-	lib := map[string]string{}
+	type slot struct {
+		lib string
+		va  uint64
+	}
+	lib := map[string]slot{}
 	for _, im := range b.Imports {
 		for _, fn := range im.Functions {
-			if fn.Name != "" {
-				lib[strings.ToLower(fn.Name)] = im.Library
+			if fn.Name == "" {
+				continue
 			}
+			sl := slot{lib: im.Library}
+			if fn.IATRVA != 0 && b.ImageBase != 0 {
+				sl.va = b.ImageBase + uint64(fn.IATRVA)
+			}
+			lib[strings.ToLower(fn.Name)] = sl
 		}
 	}
 	rank := map[models.Severity]int{models.SeverityHigh: 3, models.SeverityMedium: 2, models.SeverityLow: 1}
@@ -117,14 +126,14 @@ func reverseTargets(b *models.Binary, caps []models.Capability) []reverse.API {
 				if seen[k] || len(out) >= reverse.MaxAPIs {
 					continue
 				}
-				l, ok := lib[k]
+				sl, ok := lib[k]
 				if !ok {
 					continue // not a name in the import table; nothing to look up
 				}
 				seen[k] = true
 				api := reverse.API{Name: name}
 				if b.Family() == "pe" {
-					api.Library = l
+					api.Library, api.VA = sl.lib, sl.va
 				}
 				out = append(out, api)
 			}
