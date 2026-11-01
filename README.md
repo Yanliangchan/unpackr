@@ -1,62 +1,206 @@
 # UNPACKR
 
-*Know What's Inside.*
+**Know What's Inside.**
 
-UNPACKR is an offline, evidence-driven toolkit for static analysis of
-executables on Linux. Samples are never executed.
+[![CI](https://github.com/Yanliangchan/unpackr/actions/workflows/ci.yml/badge.svg)](https://github.com/Yanliangchan/unpackr/actions/workflows/ci.yml)
+[![Licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue.svg)](LICENSE)
 
-> **Status: early development.** What works today is listed below. Everything
-> else is refused with a clear message rather than approximated.
+UNPACKR is an offline command-line tool for the static analysis of
+executables. Point it at a PE, ELF or Mach-O file and it tells you what the file
+is, how it was built, whether it is packed or obfuscated, what it appears
+capable of, and exactly which evidence supports each statement. It is written in
+Go, ships as one static binary and **never executes a sample**.
 
-## What works now
+```
+$ unpackr -i sample.exe -x
 
+   0000: 4d5a 9000 0300 0000 0400 0000       Know what's inside.
+   ...
+UNPACKR 0.1.0  |  linux/amd64  |  offline  |  ArtVault #068
+
+File identification
+  Format     PE32  [observation, confidence: high]
+Executable structure
+  Entry      RVA 0x1ea80  in .text
+  Imports: 240 symbols from 10 libraries
+Extraction
+  Status     extracted
+             7-Zip 23.01 extracted 2 file(s) from the RAR archive at offset 488960
+```
+
+> **Status: early development.** Everything listed below works and is tested.
+> Anything that does not exist yet is refused with a clear message rather than
+> approximated, and every report lists the analysis stages that were not run, so
+> a missing stage can never be mistaken for a clean result.
+
+## Why it is built the way it is
+
+Malware analysis tools tend to make confident statements they cannot back up.
+UNPACKR is designed around the opposite rule:
+
+- **Observations are separated from inferences.** Every finding is classed as an
+  observation, an inference or a hypothesis, carries a confidence level with its
+  reason, and points at the evidence behind it.
+- **An imported API is not behaviour.** Capability wording is always
+  "references X, consistent with Y", and tests enforce it.
+- **Entropy alone never decides.** A packed verdict needs independent signals.
+  Only a validated unpack of the file can raise the verdict to *definitive*.
+- **Input is hostile.** Parsing and external tools run in separate worker
+  processes that confine themselves with Landlock, seccomp-bpf, `no_new_privs`
+  and resource limits before touching the file. If confinement cannot be
+  established, the tool is not run.
+- **Nothing is trusted on the way out.** Every string from a sample goes through
+  a sanitiser (control bytes, escape sequences, bidirectional overrides), and
+  network-looking text is defanged (`hxxp://`, `[.]`).
+
+## Features
+
+### Identification and structure
 - Content-based format identification (PE/PE+, ELF, Mach-O and universal
-  binaries, Java class/JAR, ZIP, several container and script types) with the
-  structural checks and offsets that justify each result
-- Executable structure for PE/PE+, ELF (including files with missing or damaged section headers) and Mach-O (thin and universal): headers, sections and segments with permissions, entry point mapped to section and file offset, imports, exports, linked libraries, overlay, pefile-compatible import hash, and the parser's own list of structural anomalies. Parsers run inside the sandboxed worker and are checked against pefile and LIEF (`tests/differential/diff.py`)
-- Shannon entropy per section and overlay; ASCII and UTF-16 string extraction with offsets; indicator-shaped strings (URLs, IPv4, domains, emails, Windows/Unix paths, registry keys, command lines) with false-positive filters tuned on real binaries
-- Build fingerprint: language, compiler and runtime as ranked hypotheses with the signals behind each (Go, Rust, .NET, MSVC, GCC/Clang/MinGW, Delphi, VB6, PyInstaller/Nuitka, Swift/Objective-C). C and C++ stay listed as alternatives because compiled binaries cannot reliably be told apart
-- Packing assessment (`unpacked` / `likely-packed` / `confirmed-packed` / `unknown`) from independent signals: UPX and other packer signatures, default section names, entry-point placement, empty executable sections, sparse imports, .NET protector markers. Entropy alone can never produce a packed verdict (tested)
-- Capability inference (40 rules across network, process creation, injection, persistence, credential access, collection, encryption, anti-debugging/VM, discovery) with ATT&CK mapping, API relationship chains and an explicit evidence class (`imported` / `string-referenced` / `structural`). Wording is always "references X, consistent with Y": an imported API is never presented as behaviour, and tests enforce that
-- Structural anomaly catalogue (PE, ELF, Mach-O): each entry states the fact, why it is notable and where it is common and harmless; tuned so ordinary toolchain output raises nothing above informational
-- `-u` unpacks UPX-packed files and `-c` compares two files. UPX runs only inside a confined exec worker (Landlock + seccomp: it can read its private copy of the input, write to its private work directory, start nothing else, and use no network); the output is validated (regular file, size and expansion-ratio limits, parses as the same kind of executable, entry point maps) before it is trusted, stored under a content-derived name with mode 0600, analysed like any sample, and compared with the packed file. Only a validated unpack raises the packing verdict to `definitive`. UPX is the only packer supported; nothing else is unpacked
-- `-x` extracts PyInstaller bundles with a native reader (checked against a real PyInstaller 6 build): Python version, every entry with its file offset, size, content type and SHA-256, scripts and modules saved as `.pyc` with a correct header for the bundled Python version so bytecode tools accept them. The reader runs in a sandboxed worker that can write only one private directory; names with `..` or absolute paths are skipped (never rewritten), decompression bombs and lying length fields are rejected per entry, and the parent re-verifies every produced file (type, mode, size, hash, no symlinks, no extras) before moving it into `<output-dir>/artifacts/pyinstaller-<sha256 prefix>/`. Extracted files are mode 0600 and never run. A ZIP, RAR, 7z or CAB archive appended to an executable is extracted the same way with a sandboxed native 7-Zip (`artifacts/overlay-<sha256 prefix>/`; encrypted archives are reported, never guessed). Other containers are not extracted
-- Reports: `-o report.html|.md|.csv|.json` (or `--format html|markdown|csv|json` to stdout). The HTML report is one self-contained file: no script, no external resource, a strict content-security policy, dark mode and a print stylesheet, and anchors from every finding to its evidence. It opens with an executive summary derived only from what the analysis established, and states its limits (not executed, confidence is not probability, stages not run). Every string in a report passes through a sanitiser (control and escape bytes, bidirectional overrides) and network-looking text is defanged (`hxxp://`, `[.]`) so nothing can be clicked or resolved by accident; CSV cells that could be read as spreadsheet formulas are neutralised. Batch (`-q dir -o x.html`) gives a summary table; `-c a b -o x.html` a comparison
-- A local sample memory (a small JSON index plus compressed reports, pure Go, no server; `~/.local/share/unpackr/db.json`, mode 0600) keyed by SHA-256. It stores hashes, reports and notes, **never the samples**. A file seen before is recognised by content, not name, with the date, the cases it is in, and what changed since the last analysis (including when only the UNPACKR version changed). Unpacked layers are linked to their parent. `unpackr db find <value>` pivots on indicators, hosts, import hashes, rules, capabilities or ATT&CK ids; `db forget` deletes a sample. `--no-db` or `use_database: false` turns it off
-- Cases: `unpackr case new|add|note|search|timeline|close|reopen|report`. A case groups samples, analyst notes (full-text searchable) and an automatic timeline, and its report shows the indicators and hosts shared across samples (HTML, Markdown, CSV, JSON, defanged)
-- Similarity: ssdeep and TLSH (Go ports whose output is checked byte-for-byte against the reference `ssdeep` and `py-tlsh`, including every pairwise score and distance) plus a documented, uncalibrated structural overlap (imports, strings via MinHash, sections, indicators, capabilities, import hash). `unpackr similar <file|sha>` ranks stored samples; `-c` shows the same measurements. Always shown as measurements, never as a probability or attribution (`docs/SIMILARITY.md`)
-- MD5 / SHA-1 / SHA-256, with a before-and-after integrity check on the input
-- Format identification runs in a separate worker process that confines itself
-  with Landlock, seccomp-bpf, `no_new_privs` and resource limits; `unpackr doctor`
-  shows what the current kernel provides and proves it by trying forbidden actions
-- JSON reports, batch analysis of directories with bounded concurrency
-- ArtVault startup banners (85, original, in eight categories, coloured with gradients that match the terminal's colour depth) with custom artwork support
-- Findings carry a class (observation / inference / hypothesis), an ordinal
-  confidence with its reason, and references to evidence
+  binaries, Java class/JAR, ZIP and several container and script types), showing
+  the structural checks that justify each result.
+- Headers, sections and segments with permissions, entry point mapped to a
+  section and file offset, imports, exports, linked libraries, overlay, import
+  hash, and the parser's own list of structural anomalies. ELF files with missing
+  or damaged section headers still parse. The parsers are checked against
+  pefile and LIEF (`tests/differential/diff.py`).
+- .NET metadata (ECMA-335): assembly name and version, assembly references,
+  type and method counts, P/Invoke declarations, manifest resources and name
+  statistics. It reads names and references; it does not decode IL or
+  decompile.
 
-Every report lists the analysis stages this build does **not** perform
-(PE resources/relocations/debug directory/Authenticode validation, Mach-O code signature, .NET metadata, disassembly-backed capability analysis), so a missing stage cannot be
-mistaken for a clean result.
+### Analysis
+- Shannon entropy per section, ASCII and UTF-16 strings with offsets, and
+  indicators (URLs, IPs, domains, emails, paths, registry keys, command lines)
+  with false-positive filters tuned on real binaries.
+- Build fingerprint: language, compiler and runtime as ranked hypotheses with
+  the signals behind each (Go, Rust, .NET, MSVC, GCC/Clang/MinGW, Delphi, VB6,
+  PyInstaller, Nuitka, Swift, Objective-C).
+- Packing assessment (`unpacked`, `likely-packed`, `confirmed-packed`,
+  `unknown`, `obfuscated`) from independent signals.
+- Capability inference with ATT&CK mapping, API relationship chains and an
+  explicit evidence class (`imported`, `string-referenced`, `structural`).
+- Obfuscation detection: hidden strings recovered from single-byte XOR/ADD
+  encodings without knowing the key, stack-built strings, and embedded base64
+  executables. With `-d`, a bounded disassembly pass looks for PEB module
+  walking, API-name hash loops and control-flow flattening (x86 and x86-64).
+- Hostile-structure checks for files built to break parsers (flooded export
+  tables, unreadable import directories, data directories outside the image).
+- With `-r`, radare2 runs inside the sandbox to say which functions call the
+  APIs behind each reported capability.
 
-## Build
+### Unpacking and extraction
+- `-u` unpacks UPX. The output is validated (regular file, size and expansion
+  limits, parses as the same kind of executable, entry point maps) before it is
+  trusted, then analysed like any sample and compared with the packed file.
+- `-x` extracts PyInstaller bundles with a native reader (scripts and modules
+  are saved as `.pyc` with a correct header) and ZIP, RAR, 7z or CAB archives
+  appended to an executable (with a sandboxed 7-Zip). Entries are re-verified by
+  hash in the parent process, links are rejected, extracted files are mode 0600,
+  and encrypted archives are reported, never guessed.
+- Nothing extracted or unpacked is ever run.
 
-Requires Go 1.26 (the module pins it; the Go toolchain downloads it on demand).
+### Reports, memory and workflow
+- Reports as terminal text, JSON, Markdown, CSV and a single self-contained HTML
+  file (no script, no external resource, strict content-security policy, dark
+  mode, print stylesheet, anchors from each finding to its evidence).
+- A local sample memory (a JSON index plus compressed reports, pure Go, no
+  server) keyed by SHA-256. It stores hashes, reports and notes, **never
+  samples**, and tells you when you have seen a file before and what changed.
+- Cases (`unpackr case ...`) group samples, searchable notes and an automatic
+  timeline, with a report of the indicators shared across samples.
+- Similarity with ssdeep and TLSH (checked byte-for-byte against the reference
+  implementations) plus a documented structural overlap. Always shown as a
+  measurement, never as a probability or an attribution.
+- `unpackr inspect` is an interactive terminal browser for a report.
+- `unpackr yara` drafts a YARA rule from a sample and tests it against files you
+  choose (rules are tested, not just generated).
+- Batch analysis of directories with bounded concurrency, and a before-and-after
+  integrity check on every input.
+
+### ArtVault
+Every run opens with a banner from the ArtVault: 85 original ASCII pieces in
+eight categories, from stack-frame diagrams to a cow that reads assembly,
+coloured with gradients that match your terminal's colour depth. Browse them
+with `unpackr art list`, try a style with `unpackr art show 064 --style matrix`,
+or drop your own into `~/.config/unpackr/artvault/custom/`.
+
+## Install
+
+Requires Go 1.26 to build from source (the module pins it, and the Go toolchain
+fetches it on demand).
 
 ```bash
-make build      # bin/unpackr
-make test
+git clone https://github.com/Yanliangchan/unpackr.git
+cd unpackr
+make build          # bin/unpackr and bin/unpackr-inspect
+sudo make install   # to /usr/local/bin
 ```
+
+Debian/Ubuntu/Kali packages for amd64 and arm64 are built with `make package`.
+`install.sh` installs a package only after checking it against `SHA256SUMS`.
+
+## Usage
 
 ```bash
-./bin/unpackr -i sample.bin
-./bin/unpackr -q ./samples/ --output-dir ./results/
-./bin/unpackr doctor
+unpackr sample.exe                      # full static analysis
+unpackr -q ./samples/ --output-dir out  # fast triage of a directory
+unpackr -i sample.exe -o report.html    # self-contained HTML report
+unpackr -i -d -r sample.exe             # add disassembly and radare2 passes
+unpackr -u packed.exe                   # unpack UPX, validate, re-analyse
+unpackr -x dropper.exe                  # extract embedded content
+unpackr -c a.exe b.exe                  # compare two files
+unpackr inspect sample.exe              # interactive browser
+unpackr doctor                          # what this system can and cannot do
 ```
 
-See [docs/COMMANDS.md](docs/COMMANDS.md) for every flag and its status,
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, and
-[docs/VERIFICATION.md](docs/VERIFICATION.md) for the evidence behind the
-technology choices.
+`unpackr doctor` shows which confinement the running kernel provides and proves
+it by attempting forbidden actions. See [docs/COMMANDS.md](docs/COMMANDS.md) for
+every flag, exit code and configuration option.
+
+### Optional tools
+
+None are required. Each one adds capability when present, and the report says
+when a stage was skipped because its tool is missing.
+
+| Tool | Used by |
+|---|---|
+| `upx` | `-u`, unpacking UPX |
+| 7-Zip (`7zz`, or the real `7z` executable) | `-x`, archives appended to an executable |
+| `radare2` | `-r`, call sites of imported APIs |
+
+## What it does not do
+
+- It does not run, emulate or detonate anything. It is not a sandbox for
+  behaviour.
+- It does not name malware families or attribute samples. Similarity is a
+  distance, not an identification.
+- UPX is the only packer it unpacks, and PyInstaller plus ZIP/RAR/7z/CAB
+  overlays are the only containers it extracts.
+- It was developed mostly against Windows and Linux x86 and x86-64 samples. The
+  radare2 integration has been verified on one version (5.5.0). Mach-O support
+  covers parsing, not deep analysis.
+
+## Project layout
+
+```
+cmd/unpackr            the command-line tool
+cmd/unpackr-inspect    the interactive viewer (a separate executable on purpose)
+internal/              identification, formats, analysis, sandboxed workers, reports
+pkg/models             the report data model
+assets/                rules and ArtVault banners (embedded in the binary)
+tests/                 unit, integration, differential and fixture helpers
+docs/                  design, command reference, verification evidence
+```
+
+## Documentation
+
+- [Command reference](docs/COMMANDS.md)
+- [Architecture and design decisions](docs/ARCHITECTURE.md)
+- [Verification: the evidence behind each technology choice](docs/VERIFICATION.md)
+- [Obfuscation detection](docs/OBFUSCATION.md), [.NET support](docs/DOTNET.md),
+  [similarity](docs/SIMILARITY.md), [performance and size](docs/PERFORMANCE.md)
+- [Third-party components](docs/THIRD-PARTY.md)
 
 ## Licence
 
