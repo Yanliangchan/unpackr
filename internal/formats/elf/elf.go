@@ -56,7 +56,13 @@ func Parse(data []byte) (b *models.Binary, err error) {
 			}
 		}
 	}
-	b.Kind = kind(f.Type, hasInterp)
+	b.Kind = kind(f.Type, hasInterp || isPIE(f))
+	if f.Type == elf.ET_DYN && b.Kind == "library" && !hasDynamic(f) {
+		// No interpreter, no PIE flag and no dynamic section: a static-PIE
+		// executable, a packed file or a stripped image. It cannot be called a
+		// library on this evidence.
+		b.Kind = KindAmbiguous
+	}
 
 	for i, s := range f.Sections {
 		if i == 0 && s.Type == elf.SHT_NULL {
@@ -163,6 +169,32 @@ func base(c elf.Class, d elf.Data, m elf.Machine, t elf.Type, entry uint64) *mod
 	b.Arch = archName(m)
 	b.Attributes["type"] = strings.TrimPrefix(t.String(), "ET_")
 	return b
+}
+
+// KindAmbiguous is the Kind of an ET_DYN file that carries no evidence either
+// way (no interpreter, no DF_1_PIE and no dynamic section).
+const KindAmbiguous = "executable-or-library"
+
+func isPIE(f *elf.File) bool {
+	v, err := f.DynValue(elf.DT_FLAGS_1)
+	if err != nil {
+		return false
+	}
+	for _, x := range v {
+		if x&uint64(elf.DF_1_PIE) != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func hasDynamic(f *elf.File) bool {
+	for _, p := range f.Progs {
+		if p.Type == elf.PT_DYNAMIC {
+			return true
+		}
+	}
+	return false
 }
 
 func kind(t elf.Type, interp bool) string {

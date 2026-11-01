@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -202,5 +203,36 @@ func TestUnpackedFindingsAreConsistent(t *testing.T) {
 	}
 	if packing.Confidence != models.ConfidenceDefinitive || !strings.Contains(packing.Rationale, "validated unpack") {
 		t.Fatalf("%+v", packing)
+	}
+}
+
+// A UPX-packed PIE executable has no interpreter and no dynamic section, so it
+// cannot be classified as executable or library; the unpacked output can. The
+// kind check must not reject that valid unpack.
+func TestUnpackUPXPackedPIEIsAccepted(t *testing.T) {
+	cc, err := exec.LookPath("gcc")
+	if err != nil {
+		t.Skip("gcc not available")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "p.c")
+	if err := os.WriteFile(src, []byte("#include <stdio.h>\nint main(void){puts(\"hello from pie\");return 0;}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(dir, "p")
+	if out, err := exec.Command(cc, "-O1", "-fPIE", "-pie", "-o", bin, src).CombinedOutput(); err != nil {
+		t.Skipf("cannot build a PIE: %v %s", err, out)
+	}
+	packed := fixtures.PackWithUPX(t, bin)
+	rep, err := Analyze(context.Background(), packed, unpackOpts(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireUnpackable(t, rep)
+	if rep.Binary == nil || rep.Binary.Kind != "executable-or-library" {
+		t.Fatalf("packed PIE kind = %+v", rep.Binary)
+	}
+	if rep.Unpack == nil || rep.Unpack.Status != "unpacked" {
+		t.Fatalf("unpack: %+v", rep.Unpack)
 	}
 }
