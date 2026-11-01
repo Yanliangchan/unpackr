@@ -223,11 +223,21 @@ func TestBatchDirectoryAndOutputDir(t *testing.T) {
 
 func TestUnimplementedFeaturesAreRefusedNotFaked(t *testing.T) {
 	p := write(t, t.TempDir(), "s", samplePE(), 0o600)
-	for _, flag := range []string{"-d", "-r"} {
+	for _, flag := range []string{"-r"} {
 		r := run(t, "-i", p, flag)
 		if r.code != 4 || r.stdout != "" {
 			t.Errorf("%s: code %d stdout %q", flag, r.code, r.stdout)
 		}
+	}
+}
+
+// -d is implemented for x86 and x86-64; on anything else it must say what it
+// skipped instead of producing a quiet, clean-looking result.
+func TestDeepSaysWhatItSkipped(t *testing.T) {
+	p := write(t, t.TempDir(), "s", samplePE(), 0o600) // an ARM64 image
+	r := run(t, "-d", p)
+	if r.code != 0 || !strings.Contains(r.stdout, "pattern analysis skipped") || !strings.Contains(r.stdout, "code-pattern-analysis: skipped") {
+		t.Errorf("code %d\n%s", r.code, r.stdout)
 	}
 }
 

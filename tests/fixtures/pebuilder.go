@@ -15,6 +15,8 @@ type PESpec struct {
 	Imports   map[string][]string // library -> function names (iteration order is sorted by the builder)
 	Exports   []string            // exported names, all pointing into .text
 	Overlay   []byte
+	// Code replaces the default int3 padding in .text (it is never run).
+	Code      []byte
 	Timestamp uint32
 	// SectionNames overrides the section names in order (.text first).
 	SectionNames []string
@@ -51,10 +53,11 @@ func BuildPE(s PESpec) []byte {
 	le := binary.LittleEndian
 
 	// .text: a few harmless bytes (int3 padding); it is never run.
-	text := make([]byte, 0x40)
+	text := make([]byte, max(0x40, len(s.Code)+0x20))
 	for i := range text {
 		text[i] = 0xcc
 	}
+	copy(text, s.Code)
 
 	// .idata
 	idataRVA := 0x2000

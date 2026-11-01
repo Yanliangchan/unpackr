@@ -22,6 +22,8 @@ import (
 const (
 	ProfileQuick = "quick"
 	ProfileInfo  = "info"
+	// ProfileDeep adds the slower, heuristic code-pattern pass (disassembly).
+	ProfileDeep = "deep"
 )
 
 // Options configure one analysis.

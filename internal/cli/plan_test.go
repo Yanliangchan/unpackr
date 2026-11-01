@@ -27,7 +27,7 @@ func TestBuildPlanGrammar(t *testing.T) {
 		{name: "compare three", f: Flags{Compare: true}, args: []string{"a", "b", "c"}, usage: true},
 		{name: "compare with two files", f: Flags{Compare: true}, args: []string{"a", "b"}, mode: ModeCompare},
 		{name: "quick and deep contradict", f: Flags{Quick: true, Deep: true}, args: []string{"a"}, usage: true},
-		{name: "deep unimplemented", f: Flags{Deep: true}, args: []string{"a"}, notim: true},
+		{name: "deep is accepted", f: Flags{Deep: true}, args: []string{"a"}},
 		{name: "unpack is valid with info", f: Flags{Unpack: true}, args: []string{"a"}, mode: ModeInfo},
 		{name: "unpack with quick", f: Flags{Unpack: true, Quick: true}, args: []string{"a"}, mode: ModeQuick},
 		{name: "extract is valid", f: Flags{Extract: true}, args: []string{"a"}, mode: ModeInfo},

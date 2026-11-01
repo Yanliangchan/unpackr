@@ -187,8 +187,11 @@ func (g *globals) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no regular files found in %v", plan.Paths)
 	}
 	profile := engine.ProfileInfo
-	if plan.Mode == ModeQuick {
+	switch {
+	case plan.Mode == ModeQuick:
 		profile = engine.ProfileQuick
+	case plan.Deep:
+		profile = engine.ProfileDeep
 	}
 	opts := engine.Options{Config: cfg, Profile: profile, Modules: plan.Modules, Unpack: plan.Unpack, Extract: plan.Extract, ArtifactDir: plan.OutputDir, UserRuleDir: userRuleDir()}
 
