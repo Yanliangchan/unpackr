@@ -1,0 +1,14 @@
+---
+id: 049
+category: crypto
+title: ROT13 twice
+---
+   A B C D E F G H I J K L M          rotate each letter 13 places
+   | | | | | | | | | | | | |          the alphabet has 26, so
+   N O P Q R S T U V W X Y Z          the same step undoes itself
+
+   "Hello"  ->  "Uryyb"  ->  "Hello"
+
+   encode(encode(x)) = x      an involution, like XOR with a fixed key
+
+   it hides text from a glance and from nothing else

@@ -1,0 +1,18 @@
+---
+id: 055
+category: compiler
+title: -O0 and -O2
+---
+   int sum(int *a, int n) { int s = 0; for (i...) s += a[i]; return s; }
+
+   -O0                                 -O2
+   every variable lives on the stack   variables live in registers
+      mov [rbp-4], 0                      xor eax, eax
+   .L: mov eax, [rbp-4]                .L: add eax, [rdi]
+       cmp eax, [rbp-0x1c]                 add rdi, 4
+       jge .done                           cmp rdi, rdx
+       ...                                 jne .L
+       jmp .L                              ret
+
+   the optimised code is shorter, harder to follow, and may unroll the loop
+   or use vector instructions

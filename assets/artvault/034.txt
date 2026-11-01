@@ -1,0 +1,20 @@
+---
+id: 034
+category: reverse
+title: What a packer stub does
+---
+   entry point
+       |
+       v
+   +---------------------------------------------+
+   | 1  resolve a few APIs (or none)             |
+   | 2  allocate or reuse memory                 |
+   | 3  decompress / decrypt the real program    |
+   | 4  fix imports and relocations              |
+   | 5  jump to the original entry point (OEP)   |
+   +---------------------------------------------+
+       |
+       v
+   the program as the compiler made it
+
+   until step 5 the file's imports and strings describe the stub, not the app

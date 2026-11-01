@@ -1,0 +1,16 @@
+---
+id: 024
+category: executable
+title: Base relocations
+---
+   preferred ImageBase  0x140000000        loaded at  0x7FF6A0000000
+   delta = loaded base - preferred base
+
+   .reloc  = blocks of ( page RVA , [ type | offset ] ... )
+
+     type 10  IMAGE_REL_BASED_DIR64   add delta to the 64-bit value
+     type  3  IMAGE_REL_BASED_HIGHLOW add delta to the 32-bit value
+     type  0  IMAGE_REL_BASED_ABSOLUTE padding
+
+   a file with no .reloc cannot move; with ASLR it must be loaded at its
+   preferred address or not at all

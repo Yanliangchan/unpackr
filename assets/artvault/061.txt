@@ -1,0 +1,15 @@
+---
+id: 061
+category: humour
+title: chmod 777
+---
+   $ chmod -R 777 /
+
+   the permission that fixes every "permission denied"
+   by making them everyone's problem
+
+           r w x   r w x   r w x
+           owner   group   world
+
+   everyone can read it, write it and run it,
+   including whoever you have not met yet

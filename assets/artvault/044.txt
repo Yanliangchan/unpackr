@@ -1,0 +1,20 @@
+---
+id: 044
+category: os
+title: Process address space
+---
+   high   0x7fff........   +-------------------------+
+                            | stack            grows v |
+                            +-------------------------+
+                            |                         |
+                            +-------------------------+
+                            | mmap: libraries, files  |
+                            +-------------------------+
+                            | heap (brk)       grows ^ |
+                            +-------------------------+
+                            | .bss  .data             |
+                            | .text                   |
+   low    0x0000..........  +-------------------------+
+                            | page 0 never mapped: a NULL access faults |
+
+   cat /proc/self/maps  shows the real one

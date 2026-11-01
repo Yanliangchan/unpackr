@@ -1,0 +1,15 @@
+---
+id: 022
+category: executable
+title: The Rich header
+---
+   [ DOS stub ]
+   [ XOR-masked block  ]   <- "DanS" ^ key, then (tool id, build, count) pairs
+   [ "Rich" | key      ]   <- the key is also a checksum of the DOS header
+   [ PE header         ]
+
+   each pair records one Microsoft tool that touched the file: which
+   compiler, which linker, how many objects, which build number
+
+   it is written by the linker, not required by the loader, and can be
+   copied or forged; match it against the rest of the file, never alone

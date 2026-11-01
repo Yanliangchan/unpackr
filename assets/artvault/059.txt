@@ -1,0 +1,12 @@
+---
+id: 059
+category: humour
+title: Core dumped
+---
+        _______
+       /       \          Segmentation fault (core dumped)
+      |  R.I.P. |
+      |         |         here lies a pointer
+      |  *p     |         it believed in memory
+      |  0x0    |         it was wrong
+   ---+---------+---

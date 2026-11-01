@@ -1,0 +1,20 @@
+---
+id: 052
+category: crypto
+title: CBC chaining
+---
+   P1          P2          P3
+    |           |           |
+ IV-xor      C1-xor      C2-xor
+    |           |           |
+  [ E ]       [ E ]       [ E ]        E = block cipher with the key
+    |           |           |
+    C1 ---------+           |
+    |    C2 ----------------+
+    |    |         C3
+    |    |
+
+   C(i) = E( P(i) xor C(i-1) ),   C(0) = IV
+
+   the same block encrypts differently in different places, but a damaged
+   C(i) corrupts two plaintext blocks

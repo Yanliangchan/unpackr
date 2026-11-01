@@ -1,0 +1,19 @@
+---
+id: 051
+category: crypto
+title: Feistel round
+---
+   plaintext split in two halves:  L0 | R0
+
+        L0            R0
+        |             |
+        |            [F]<--- round key K1
+        |             |
+        +----(xor)----+
+        |             |
+        +---- swap ---+
+        |             |
+        L1 = R0       R1 = L0 xor F(R0, K1)
+
+   decrypting runs the same rounds with the keys reversed, and F need not be
+   invertible. DES is a Feistel cipher; AES is not.

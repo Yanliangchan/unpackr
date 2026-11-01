@@ -1,0 +1,17 @@
+---
+id: 047
+category: os
+title: Raw system calls
+---
+   x86-64 Linux            number    C library call
+
+   mov eax, 0   syscall      0       read(fd, buf, n)
+   mov eax, 1   syscall      1       write(fd, buf, n)
+   mov eax, 2   syscall      2       open(path, flags)
+   mov eax, 9   syscall      9       mmap(...)
+   mov eax, 59  syscall     59       execve(path, argv, envp)
+   mov eax, 60  syscall     60       exit(code)
+
+   rax comes back holding the result, or -errno (between -4095 and -1)
+
+   a program that calls syscall directly has no import to show for it

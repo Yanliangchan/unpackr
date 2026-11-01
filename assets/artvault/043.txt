@@ -1,0 +1,16 @@
+---
+id: 043
+category: os
+title: ASLR
+---
+   run 1                         run 2
+
+   0x7ffc1a000000  stack         0x7ffd8b400000  stack
+   0x7f3a50000000  libc          0x7f9e12000000  libc
+   0x55d2c4e00000  program (PIE) 0x5612a8800000  program (PIE)
+   0x55d2c5100000  heap          0x5612a9c00000  heap
+
+   the layout is drawn from a random pool at every exec
+
+   a leaked pointer into libc gives the base: subtract its known offset
+   a program built without PIE keeps fixed addresses for its own code

@@ -1,0 +1,21 @@
+---
+id: 046
+category: os
+title: How this tool confines a worker
+---
+   untrusted bytes are parsed by a separate process:
+
+   +-------------------------------------------------------------+
+   | rlimits       memory, CPU time, file size, process count    |
+   | +---------------------------------------------------------+ |
+   | | no_new_privs  cannot gain privileges                    | |
+   | | +-----------------------------------------------------+ | |
+   | | | Landlock      filesystem: read the one input only   | | |
+   | | | +-------------------------------------------------+ | | |
+   | | | | seccomp-bpf   no socket, no execve, no ptrace   | | | |
+   | | | +-------------------------------------------------+ | | |
+   | | +-----------------------------------------------------+ | |
+   | +---------------------------------------------------------+ |
+   +-------------------------------------------------------------+
+
+   each layer is applied before the next; the worker cannot undo them

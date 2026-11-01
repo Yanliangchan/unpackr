@@ -65,8 +65,8 @@ func TestPickAvoidsLastAndHonoursSelectors(t *testing.T) {
 			t.Fatalf("repeated last banner: %v %v", b.ID, err)
 		}
 	}
-	if b, _ := v.Pick("024", "", rnd); b.ID == "024" {
-		t.Fatal("id 024 does not exist yet")
+	if b, _ := v.Pick("999", "", rnd); b.ID == "999" {
+		t.Fatal("id 999 does not exist")
 	}
 	if b, err := v.Pick("003", "", rnd); err != nil || b.ID != "003" {
 		t.Fatal(err)
@@ -112,5 +112,12 @@ func TestFavouritesAndLast(t *testing.T) {
 	RememberShown(d, "005")
 	if LastShown(d) != "005" {
 		t.Fatal("last")
+	}
+}
+
+// The library promises at least sixty original banners.
+func TestAtLeastSixtyBuiltInBanners(t *testing.T) {
+	if n := len(builtin(t).All()); n < 60 {
+		t.Fatalf("%d built-in banners, want at least 60", n)
 	}
 }

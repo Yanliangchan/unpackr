@@ -1,0 +1,14 @@
+---
+id: 060
+category: humour
+title: The analyst's three states
+---
+      state 1                state 2                state 3
+
+   not yet unpacked      unpacked, but           deobfuscated, and
+                         still obfuscated        quite boring
+
+      [ ?? ??  ]            [ x1 x2 x3 ]            [ calls ]
+      [ ?? ??  ]            [ x4 x5 x6 ]            [ system("calc") ]
+
+   most of the time is spent between the first and the third

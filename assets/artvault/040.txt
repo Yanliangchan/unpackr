@@ -1,0 +1,15 @@
+---
+id: 040
+category: low-level
+title: Two's complement
+---
+   8-bit values              negate = invert every bit, then add 1
+
+    5  = 0000 0101                5 = 0000 0101
+   -5  = 1111 1011           invert = 1111 1010
+                                 +1 = 1111 1011   = -5
+
+   the top bit is the sign; the range is -128 .. 127
+
+   0xFF as a signed byte is -1 and as an unsigned byte is 255, which is how
+   one comparison can be right and the next one wrong

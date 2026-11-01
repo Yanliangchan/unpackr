@@ -1,0 +1,16 @@
+---
+id: 031
+category: reverse
+title: Opaque predicate
+---
+   if ( (x * (x + 1)) % 2 == 0 )     <- always true: of two neighbours
+       real_code();                     one is even
+   else
+       junk_that_never_runs();        <- looks reachable to a disassembler
+
+                 x*(x+1) % 2 == 0
+                 /              \
+            (always)           (never)
+              real              junk
+
+   it costs nothing to run and doubles the code a reader must understand

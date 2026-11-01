@@ -1,0 +1,15 @@
+---
+id: 045
+category: os
+title: How a program starts
+---
+   shell                kernel                      ld.so            program
+     |  fork()            |                           |                |
+     |  execve(path) ---> | maps the file             |                |
+     |                    | maps PT_INTERP too        |                |
+     |                    | sets up stack: argv, envp,|                |
+     |                    |  auxv (AT_ENTRY, AT_RANDOM)|               |
+     |                    | jumps to ld.so ---------> | load libraries |
+     |                    |                           | relocate       |
+     |                    |                           | jump to _start>|
+     |  wait4() <-------- exit_group() ---------------------------------|
