@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Yanliangchan/unpackr/internal/similarity"
 	"github.com/Yanliangchan/unpackr/pkg/models"
 )
 
@@ -136,6 +137,10 @@ func Diff(a, b *models.Report) *models.Comparison {
 		}
 	} else if aa != nil || ab != nil {
 		c.Notes = append(c.Notes, "content analysis is missing for one file; entropy, packing, fingerprint, capability and indicator comparison was skipped")
+	}
+	if a.Analysis != nil && b.Analysis != nil {
+		sim := similarity.Structural(a, b)
+		c.Similarity = &sim
 	}
 	return c
 }

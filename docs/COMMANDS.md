@@ -11,6 +11,7 @@ unpackr doctor
 unpackr art list | show <id> | categories | favourite <id> | favourites
 unpackr db path | stats | find <value> [--kind K] | forget <sha256>
 unpackr case new|list|add|note|search|timeline|close|reopen|report
+unpackr similar <file|sha256-prefix> [--limit N] [-v]
 unpackr completion bash|zsh|fish
 unpackr --version
 ```

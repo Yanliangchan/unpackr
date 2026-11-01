@@ -15,6 +15,8 @@ require (
 	github.com/blacktop/go-macho v1.1.296 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/edsrzf/mmap-go v1.1.0 // indirect
+	github.com/glaslos/ssdeep v1.0.0 // indirect
+	github.com/glaslos/tlsh v0.4.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect

@@ -660,3 +660,35 @@ func TestDatabaseFailureNeverBlocksAnalysis(t *testing.T) {
 		t.Fatalf("stdout %.100s stderr %s", o.String(), e.String())
 	}
 }
+
+func TestSimilarCommandAndComparisonSimilarity(t *testing.T) {
+	plain := fixtures.GoBinary(t, "linux", "amd64")
+	data, _ := os.ReadFile(plain)
+	variant := append([]byte(nil), data...)
+	for i := len(variant) / 3; i < len(variant)/3+60000; i++ {
+		variant[i] ^= 0x5a
+	}
+	d := t.TempDir()
+	vp := write(t, d, "variant", variant, 0o600)
+	if r := run(t, "-i", plain, "--no-banner"); r.code != 0 {
+		t.Fatalf("%s", r.stderr)
+	}
+	r := run(t, "similar", vp)
+	if r.code != 0 || !strings.Contains(r.stdout, "TLSH") || strings.Contains(r.stdout, "no stored sample resembles") {
+		t.Fatalf("%d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	if !strings.Contains(r.stdout, "None is a probability") {
+		t.Error("the caveat must be printed with similarity results")
+	}
+	// An empty database says so instead of inventing a match.
+	if r := run(t, "similar", write(t, d, "lonely", samplePE(), 0o600)); r.code != 0 {
+		t.Fatalf("%s", r.stderr)
+	}
+	c := run(t, "-c", plain, vp)
+	if c.code != 0 || !strings.Contains(c.stdout, "similarity") || !strings.Contains(c.stdout, "not probabilities") {
+		t.Fatalf("%s", c.stdout)
+	}
+	if r := run(t, "similar", "zz"); r.code != 2 {
+		t.Fatalf("bad prefix: %d", r.code)
+	}
+}

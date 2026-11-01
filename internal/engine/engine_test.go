@@ -322,3 +322,19 @@ func TestCapabilitiesAndAnomaliesInReport(t *testing.T) {
 		}
 	}
 }
+
+func TestAnalysisCarriesFuzzyHashesAndStringSketch(t *testing.T) {
+	data := fixtures.BuildPE(fixtures.PESpec{Imports: map[string][]string{"KERNEL32.dll": {"CreateFileW", "ReadFile", "WriteFile", "CloseHandle", "GetLastError", "HeapAlloc"}}, Overlay: []byte(strings.Repeat("some reasonably long printable string ", 400))})
+	rep, err := Analyze(context.Background(), write(t, "s.bin", data), opts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := rep.Analysis.Fuzzy
+	if !strings.HasPrefix(f.TLSH, "T1") || !strings.Contains(f.SSDeep, ":") || len(f.StringSketch) != 128 {
+		t.Fatalf("%+v", f)
+	}
+	again, _ := Analyze(context.Background(), write(t, "s2.bin", data), opts())
+	if again.Analysis.Fuzzy.TLSH != f.TLSH || again.Analysis.Fuzzy.SSDeep != f.SSDeep {
+		t.Fatal("fuzzy hashes must be deterministic")
+	}
+}

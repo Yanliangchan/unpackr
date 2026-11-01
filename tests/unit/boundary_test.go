@@ -97,3 +97,8 @@ func TestStorageBoundaries(t *testing.T) {
 	mustNotImport(t, "internal/cases", "internal/terminal", "internal/cli", "internal/artvault", "internal/engine")
 	mustNotImport(t, "internal/engine", "internal/database", "internal/cases")
 }
+
+// Similarity is pure computation on the data model.
+func TestSimilarityIsPureComputation(t *testing.T) {
+	mustNotImport(t, "internal/similarity", "internal/terminal", "internal/cli", "internal/artvault", "internal/engine", "internal/database", "internal/reporting", "internal/worker")
+}

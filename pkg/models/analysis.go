@@ -181,4 +181,34 @@ type Analysis struct {
 	Evidence     []Evidence        `json:"evidence"`
 	Yara         []YaraMatch       `json:"yara_matches"`
 	Engines      []EngineStatus    `json:"engines"`
+	Fuzzy        Fuzzy             `json:"fuzzy"`
+}
+
+// Fuzzy holds locality-sensitive hashes of the whole file and a sketch of its
+// strings, used only to recognise related files locally.
+type Fuzzy struct {
+	SSDeep       string   `json:"ssdeep,omitempty"`
+	TLSH         string   `json:"tlsh,omitempty"`
+	StringSketch []uint32 `json:"string_sketch,omitempty"`
+}
+
+// SimilarityComponent is the overlap of one property of two files.
+type SimilarityComponent struct {
+	Name   string  `json:"name"`
+	Score  float64 `json:"score"` // 0 (nothing shared) to 1 (identical sets)
+	Weight float64 `json:"weight"`
+	Note   string  `json:"note"`
+}
+
+// Similarity is how alike two files are. Overlap is a weighted mean of the
+// components that could be compared, shown only when there are enough of
+// them. It is not a probability and not evidence of a shared origin.
+type Similarity struct {
+	Components   []SimilarityComponent `json:"components"`
+	Overlap      float64               `json:"weighted_structural_overlap"`
+	HasOverlap   bool                  `json:"has_overlap"`
+	TLSHDistance int                   `json:"tlsh_distance"`
+	HasTLSH      bool                  `json:"has_tlsh"`
+	SSDeepScore  int                   `json:"ssdeep_score"`
+	HasSSDeep    bool                  `json:"has_ssdeep"`
 }

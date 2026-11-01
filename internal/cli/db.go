@@ -16,6 +16,7 @@ import (
 	"github.com/Yanliangchan/unpackr/internal/database"
 	"github.com/Yanliangchan/unpackr/internal/engine"
 	"github.com/Yanliangchan/unpackr/internal/reporting"
+	"github.com/Yanliangchan/unpackr/internal/similarity"
 	"github.com/Yanliangchan/unpackr/internal/terminal"
 	"github.com/Yanliangchan/unpackr/pkg/models"
 )
@@ -320,3 +321,83 @@ func newCaseCmd(g *globals) *cobra.Command {
 	c.AddCommand(rep)
 	return c
 }
+
+func newSimilarCmd(g *globals) *cobra.Command {
+	var limit int
+	c := &cobra.Command{Use: "similar <file|sha256-prefix>", Short: "Find stored samples that resemble a file",
+		Long: "Compares a file with every sample in the local database using TLSH and ssdeep, then a documented structural overlap (imports, sections, strings, indicators, capabilities, import hash). Distances and overlaps are shown as measured; none is a probability or evidence of a shared family. See docs/SIMILARITY.md.",
+		Args: usageArgs(cobra.ExactArgs(1))}
+	c.Flags().IntVar(&limit, "limit", 10, "how many results to show")
+	c.RunE = func(cmd *cobra.Command, args []string) error {
+		db, err := g.needDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close() //nolint:errcheck // short command
+		cfg, err := g.loadConfig()
+		if err != nil {
+			return err
+		}
+		var rep *models.Report
+		if st, serr := os.Stat(args[0]); serr == nil && st.Mode().IsRegular() {
+			rep, err = engine.Analyze(context.Background(), args[0], engine.Options{Config: cfg, Profile: engine.ProfileInfo})
+			if err != nil {
+				return err
+			}
+			if aerr := db.Annotate(rep); aerr != nil {
+				return aerr
+			}
+			if rerr := db.Record(rep); rerr != nil {
+				return rerr
+			}
+		} else {
+			sha, rerr := cases.ResolveSample(db, args[0])
+			if rerr != nil {
+				return usagef("%v", rerr)
+			}
+			if rep, err = db.LoadReport(sha); err != nil {
+				return err
+			}
+		}
+		hits, err := db.Similar(rep, limit)
+		if err != nil {
+			return err
+		}
+		out := cmd.OutOrStdout()
+		st := terminal.Style{On: terminal.ColorEnabled(os.Stdout, g.noColor)}
+		fmt.Fprintf(out, "%s %s\n", st.Bold("Similar to"), safe(rep.File.Name)+"  "+rep.File.Hashes.SHA256)
+		if len(hits) == 0 {
+			fmt.Fprintln(out, "no stored sample resembles this file (the database may simply not hold related samples yet)")
+			return nil
+		}
+		fmt.Fprintf(out, "%s\n", st.Dim("TLSH: lower is closer. ssdeep: higher is closer. Overlap: weighted structural overlap, 0 to 1, shown only with 3 or more comparable properties. None is a probability or evidence of shared origin."))
+		for _, h := range hits {
+			s := h.Similarity
+			t, ss, ov := "TLSH n/a", "ssdeep n/a", "overlap n/a"
+			if s.HasTLSH {
+				t = fmt.Sprintf("TLSH %d (%s)", s.TLSHDistance, similarityLabelT(s.TLSHDistance))
+			}
+			if s.HasSSDeep {
+				ss = fmt.Sprintf("ssdeep %d", s.SSDeepScore)
+			}
+			if s.HasOverlap {
+				ov = fmt.Sprintf("overlap %.2f", s.Overlap)
+			}
+			fmt.Fprintf(out, "\n%s  %s\n  %s | %s | %s", h.SHA256[:16], safe(h.Name), t, ss, ov)
+			if len(h.Shared) > 0 {
+				fmt.Fprintf(out, "\n  shares: %s", strings.Join(h.Shared, ", "))
+			}
+			fmt.Fprintln(out)
+			if g.verbose {
+				for _, comp := range s.Components {
+					fmt.Fprintf(out, "    %-12s %.3f (weight %.2f)  %s\n", comp.Name, comp.Score, comp.Weight, st.Dim(comp.Note))
+				}
+			}
+		}
+		return nil
+	}
+	c.Flags().BoolVarP(&g.verbose, "verbose", "v", false, "show each overlap component")
+	return c
+}
+
+func similarityLabelT(d int) string { return similarity.TLSHLabel(d) }
