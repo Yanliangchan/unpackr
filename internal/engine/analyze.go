@@ -21,6 +21,9 @@ import (
 	"github.com/Yanliangchan/unpackr/pkg/models"
 )
 
+// NotRunFuzzy is reported when the quick profile skipped similarity hashing.
+const NotRunFuzzy = "fuzzy-hashing: skipped by the quick profile (ssdeep, TLSH and the string sketch are empty, which does not mean the file is unique)"
+
 // TaskAnalyze runs the content-derived stages in a sandboxed worker:
 // entropy, strings, indicators, fingerprinting and the packing assessment.
 const TaskAnalyze = "analyze"
@@ -30,6 +33,8 @@ type AnalyzeParams struct {
 	Family string             `json:"family"`
 	Binary *models.Binary     `json:"binary,omitempty"`
 	Yara   []models.YaraMatch `json:"yara,omitempty"`
+	// SkipFuzzy omits ssdeep, TLSH and the string sketch (quick profile).
+	SkipFuzzy bool `json:"skip_fuzzy,omitempty"`
 }
 
 func init() {
@@ -46,12 +51,16 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		return RunAnalysis(data, p.Family, p.Binary, p.Yara), nil
+		return analyzeBytes(data, p.Family, p.Binary, p.Yara, p.SkipFuzzy), nil
 	})
 }
 
 // RunAnalysis is the pure core of the analyze task.
 func RunAnalysis(data []byte, family string, bin *models.Binary, yaraMatches []models.YaraMatch) *models.Analysis {
+	return analyzeBytes(data, family, bin, yaraMatches, false)
+}
+
+func analyzeBytes(data []byte, family string, bin *models.Binary, yaraMatches []models.YaraMatch, skipFuzzy bool) *models.Analysis {
 	// Universal Mach-O: work on the first slice's section table for mapping.
 	view := bin
 	if view != nil && len(view.Slices) > 0 {
@@ -103,14 +112,18 @@ func RunAnalysis(data []byte, family string, bin *models.Binary, yaraMatches []m
 	}
 	caps := capabilities.Detect(in, pk.State)
 	anoms := anomalies.Detect(in)
-	ssd, tl := similarity.Hash(data)
-	sketch := similarity.Sketch(func(yield func(string)) {
-		for _, h := range scan.Hits {
-			if len(h.Text) >= 8 {
-				yield(h.Text)
+	var ssd, tl string
+	var sketch []uint32
+	if !skipFuzzy {
+		ssd, tl = similarity.Hash(data)
+		sketch = similarity.Sketch(func(yield func(string)) {
+			for _, h := range scan.Hits {
+				if len(h.Text) >= 8 {
+					yield(h.Text)
+				}
 			}
-		}
-	})
+		})
+	}
 	out := &models.Analysis{
 		Fuzzy:        models.Fuzzy{SSDeep: ssd, TLSH: tl, StringSketch: sketch},
 		Capabilities: caps,
@@ -130,7 +143,7 @@ func RunAnalysis(data []byte, family string, bin *models.Binary, yaraMatches []m
 func runAnalysis(ctx context.Context, f *os.File, size int64, rep *models.Report, family string, wo worker.Options, o Options) {
 	matches, eng := runYara(ctx, f, size, o)
 	start := time.Now()
-	res, err := worker.Run(ctx, TaskAnalyze, AnalyzeParams{Family: family, Binary: rep.Binary, Yara: matches}, f, size, wo)
+	res, err := worker.Run(ctx, TaskAnalyze, AnalyzeParams{Family: family, Binary: rep.Binary, Yara: matches, SkipFuzzy: o.Profile == ProfileQuick}, f, size, wo)
 	run := models.ModuleRun{Name: "content-analysis", DurationMS: time.Since(start).Milliseconds()}
 	if res != nil {
 		sb := res.Sandbox
@@ -157,6 +170,9 @@ func runAnalysis(ctx context.Context, f *os.File, size int64, rep *models.Report
 	rep.Analysis = &a
 	rep.Evidence = append(rep.Evidence, a.Evidence...)
 	addAnalysisFindings(rep, &a)
+	if o.Profile == ProfileQuick {
+		rep.NotRun = append(rep.NotRun, NotRunFuzzy)
+	}
 	rep.NotRun = withoutStages(rep.NotRun, "entropy-analysis", "string-extraction", "indicator-extraction", "language-and-compiler-identification", "packing-assessment", "capability-inference", "anomaly-detection")
 }
 
