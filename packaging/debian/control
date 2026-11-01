@@ -1,0 +1,14 @@
+Package: unpackr
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: Yanliangchan <yanliangchan@gmail.com>
+Installed-Size: @SIZE@
+Section: utils
+Priority: optional
+Homepage: https://github.com/Yanliangchan/unpackr
+Suggests: upx-ucl, yara
+Description: Binary intelligence and static malware analysis toolkit
+ UNPACKR identifies, parses and assesses executables statically and offline
+ (PE, ELF, Mach-O), infers capabilities with evidence and confidence, extracts
+ indicators, and unpacks UPX and extracts PyInstaller bundles. Samples are
+ never executed. Optional tools such as upx are used only when present.
