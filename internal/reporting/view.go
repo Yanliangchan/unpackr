@@ -90,6 +90,16 @@ func Summary(r *models.Report) []string {
 	if r.Extraction != nil && r.Extraction.Status == "extracted" {
 		out = append(out, clean(r.Extraction.Message)+".")
 	}
+	if k := r.Known; k != nil {
+		line := fmt.Sprintf("This file was seen before: first on %s, analysed %d time(s) previously, last on %s.", clean(k.FirstSeen), k.TimesSeen, clean(k.LastSeen))
+		if len(k.Cases) > 0 {
+			line += " It belongs to case(s): " + clean(strings.Join(k.Cases, ", ")) + "."
+		}
+		if k.ToolChange != "" {
+			line += " The analysis tool changed (" + clean(k.ToolChange) + "), so differences may come from the analysis rather than the file."
+		}
+		out = append(out, line)
+	}
 	out = append(out, "This is a static analysis: the sample was never executed. Confidence labels describe how well the evidence supports a statement, and are not probabilities.")
 	if len(r.NotRun) > 0 {
 		out = append(out, fmt.Sprintf("%d analysis stage(s) are not available in this build, so their absence is not a clean result: %s.", len(r.NotRun), clean(strings.Join(shortNames(r.NotRun), "; "))))

@@ -34,6 +34,7 @@ type globals struct {
 	timeout    time.Duration
 	offline    bool
 	requireSB  bool
+	noDB       bool
 	flags      Flags
 }
 
@@ -154,9 +155,10 @@ Run 'unpackr doctor' to check the sandbox and optional tools.`,
 	f.IntVar(&g.threads, "threads", 0, "concurrent analyses for batches (default from config)")
 	f.DurationVar(&g.timeout, "timeout", 0, "per-worker time limit, e.g. 90s (default from config)")
 	f.BoolVar(&g.offline, "offline", true, "never use the network (always true in this build)")
+	f.BoolVar(&g.noDB, "no-db", false, "do not read or write the local sample database")
 	f.BoolVar(&g.requireSB, "require-sandbox", false, "refuse to analyse unless workers are fully sandboxed")
 
-	root.AddCommand(newDoctorCmd(g), newArtCmd(g))
+	root.AddCommand(newDoctorCmd(g), newArtCmd(g), newDBCmd(g), newCaseCmd(g))
 	return root
 }
 
@@ -202,6 +204,8 @@ func (g *globals) run(cmd *cobra.Command, args []string) error {
 	if ctx.Err() != nil {
 		return fmt.Errorf("interrupted")
 	}
+
+	g.remember(cfg, reps)
 
 	if plan.OutputDir != "" {
 		if err := writePerFile(plan.OutputDir, reps); err != nil {

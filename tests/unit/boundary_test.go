@@ -89,3 +89,11 @@ func TestUnpackingAndComparisonAreIndependentOfPresentation(t *testing.T) {
 func TestReportingOnlyDependsOnTheModel(t *testing.T) {
 	mustNotImport(t, "internal/reporting", "internal/terminal", "internal/cli", "internal/artvault", "internal/engine", "internal/worker", "assets")
 }
+
+// The database and case code is storage, not presentation, and the engine
+// must never depend on it.
+func TestStorageBoundaries(t *testing.T) {
+	mustNotImport(t, "internal/database", "internal/terminal", "internal/cli", "internal/artvault", "internal/engine", "internal/reporting")
+	mustNotImport(t, "internal/cases", "internal/terminal", "internal/cli", "internal/artvault", "internal/engine")
+	mustNotImport(t, "internal/engine", "internal/database", "internal/cases")
+}
