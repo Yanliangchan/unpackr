@@ -31,7 +31,7 @@ func TestBuildPlanGrammar(t *testing.T) {
 		{name: "unpack is valid with info", f: Flags{Unpack: true}, args: []string{"a"}, mode: ModeInfo},
 		{name: "unpack with quick", f: Flags{Unpack: true, Quick: true}, args: []string{"a"}, mode: ModeQuick},
 		{name: "extract is valid", f: Flags{Extract: true}, args: []string{"a"}, mode: ModeInfo},
-		{name: "reverse unimplemented", f: Flags{Reverse: true}, args: []string{"a"}, notim: true},
+		{name: "reverse is accepted", f: Flags{Reverse: true}, args: []string{"a"}},
 		{name: "compare with unpack is a usage error first", f: Flags{Compare: true, Unpack: true}, args: []string{"a", "b"}, usage: true},
 		{name: "html output", f: Flags{Output: "r.html"}, args: []string{"a"}, mode: ModeInfo},
 		{name: "markdown output", f: Flags{Output: "r.md"}, args: []string{"a"}, mode: ModeInfo},

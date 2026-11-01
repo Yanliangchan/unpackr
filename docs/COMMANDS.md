@@ -42,7 +42,7 @@ A path may appear before or after flags. A file literally named `doctor`,
 | `-d` | `--deep` | works for x86/x86-64 | Everything `-i` does, plus a bounded linear disassembly of the executable sections that looks for three obfuscation idioms: PEB module walking, the ror-13 API-name hash loop and control-flow-flattening dispatchers. Other architectures are listed under `not_run` as skipped. See `docs/OBFUSCATION.md` |
 | `-u` | `--unpack` | works for UPX | Unpacks UPX-packed files with `upx -d` in a sandbox, validates, analyses and compares the result. Needs `upx` installed. Output goes to `<output-dir>/artifacts/` (default `./unpackr-out/artifacts/`) as `<sha256>.bin`, mode 0600. Other packers report `not-applicable` |
 | `-x` | `--extract` | works for PyInstaller | Extracts the bundle into `<output-dir>/artifacts/pyinstaller-<sha256 prefix>/` (default `./unpackr-out/`). Other files report `not-applicable` |
-| `-r` | `--reverse` | **not implemented** | Exit 4 |
+| `-r` | `--reverse` | works for ELF and PE with radare2 | Asks radare2 (inside the sandbox) which functions reference the imported APIs behind each reported capability, how many functions it finds and which is largest. Without radare2 the run succeeds and `not_run` says so. See the `-r` section below |
 | `-c` | `--compare` | works | Exactly two files; shows header, section, import, export, entropy, packing, fingerprint, capability, indicator and string differences. `--format json` / `-o x.json` give the structured comparison |
 | `-h` | `--help` | works | |
 
@@ -207,3 +207,33 @@ written as YARA modifiers and are listed as left out. A rule built from a
 packed sample describes the packer, so unpack first (`-u`). Without `yr` installed
 the rule is drafted but reported as not compiled or tested. `-o` never overwrites
 an existing file.
+
+## -r (reverse)
+
+`-r` runs radare2 5.5.0 or later against ELF and PE files and adds a "Reverse
+engineering" block: the number of functions it discovers, the function containing
+the entry point, the largest functions, and **where each imported API is
+referenced** (`call`, `jump` or `data`, with the containing function and address).
+That answers what the import table cannot: whether and from where an API is used.
+Each reference becomes evidence and a finding, and the capability that rests on the
+API gets a note ("radare2: CreateProcessA is called from main").
+
+* Which APIs: those behind a reported capability, most serious first, at most 40.
+* Addresses are virtual addresses in radare2's view, not file offsets.
+* Findings are observations at medium confidence at most. A reference is found by
+  static analysis; it may be in code that never runs, and function discovery in
+  packed or obfuscated code is unreliable.
+* radare2 runs in the same exec sandbox as the other tools (no network, one
+  writable scratch directory, Landlock, seccomp). The script is fixed; only API
+  names from the file's import table are placed in it, and only if they match
+  `[A-Za-z0-9_.$]` (PE library names `[A-Za-z0-9_.-]`). Others are skipped and
+  counted. radare2's own sandbox setting is also on, but it is a second line only:
+  testing showed it blocks a leading `!`, pipes and file writes, and does **not**
+  stop a `!` inside backticks.
+* Section breaks in radare2's output are random per-run tokens, because the output
+  contains names taken from the hostile file.
+* Not supported: Mach-O (not verified), Rizin (command-compatible but not tested),
+  versions other than 5.5.0 (the output formats were checked only on 5.5.0), files
+  over 64 MiB, and import names with other characters (C++ and MSVC mangled names).
+  Ghidra, capa, FLOSS and ILSpy adapters do not exist.
+* `-d` and `-r` can be combined.

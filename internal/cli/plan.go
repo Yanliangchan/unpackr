@@ -36,6 +36,7 @@ type Plan struct {
 	Verbose    bool
 	Unpack     bool
 	Deep       bool
+	Reverse    bool
 	Extract    bool
 	Format     string // terminal | json
 	OutputFile string
@@ -102,6 +103,7 @@ func BuildPlan(f Flags, args []string) (Plan, error) {
 	p.Verbose = f.Verbose
 	p.Unpack = f.Unpack
 	p.Deep = f.Deep
+	p.Reverse = f.Reverse
 	p.Extract = f.Extract
 
 	p.Format = f.Format
@@ -149,11 +151,6 @@ func BuildPlan(f Flags, args []string) (Plan, error) {
 		sort.Strings(p.Modules)
 	}
 
-	// Valid commands that this build cannot honour.
-	switch {
-	case f.Reverse:
-		return p, &NotImplementedError{"-r/--reverse"}
-	}
 	if p.OutputFmt == "terminal" {
 		return p, usagef("-o needs a file format (json), not terminal")
 	}
