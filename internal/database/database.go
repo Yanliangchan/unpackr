@@ -398,6 +398,8 @@ func Features(rep *models.Report) [][2]string {
 			add("packer", a.Packing.Family)
 		}
 		add("language", hypName(a.Fingerprint.Languages))
+		add("ssdeep", a.Fuzzy.SSDeep)
+		add("tlsh", a.Fuzzy.TLSH)
 	}
 	return out
 }

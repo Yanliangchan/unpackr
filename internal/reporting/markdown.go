@@ -331,6 +331,24 @@ func mdComparison(m *mdw, c *models.Comparison, lvl int) {
 		}
 		m.p("- **%s** only in first (%d): %s\n- **%s** only in second (%d): %s\n", s.name, len(s.d.OnlyA), mdText(strings.Join(limit(s.d.OnlyA, 30), ", ")), s.name, len(s.d.OnlyB), mdText(strings.Join(limit(s.d.OnlyB, 30), ", ")))
 	}
+	if sm := c.Similarity; sm != nil {
+		m.p("\n**Similarity** (measurements, not probabilities; none is evidence of a shared origin):")
+		if sm.HasTLSH {
+			m.p(" TLSH distance %d;", sm.TLSHDistance)
+		}
+		if sm.HasSSDeep {
+			m.p(" ssdeep %d;", sm.SSDeepScore)
+		}
+		if sm.HasOverlap {
+			m.p(" structural overlap %.2f;", sm.Overlap)
+		}
+		m.p("\n\n")
+		var rows [][]string
+		for _, comp := range sm.Components {
+			rows = append(rows, []string{mdCell(comp.Name), fmt.Sprintf("%.3f", comp.Score), fmt.Sprintf("%.2f", comp.Weight), mdCell(comp.Note)})
+		}
+		m.table([]string{"Component", "Score", "Weight", "How"}, rows)
+	}
 	for _, n := range c.Notes {
 		m.p("\n*%s*\n", mdText(n))
 	}

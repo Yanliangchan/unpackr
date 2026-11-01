@@ -16,6 +16,7 @@ import (
 	"github.com/Yanliangchan/unpackr/internal/content"
 	"github.com/Yanliangchan/unpackr/internal/fingerprint"
 	"github.com/Yanliangchan/unpackr/internal/packing"
+	"github.com/Yanliangchan/unpackr/internal/similarity"
 	"github.com/Yanliangchan/unpackr/internal/worker"
 	"github.com/Yanliangchan/unpackr/pkg/models"
 )
@@ -102,7 +103,16 @@ func RunAnalysis(data []byte, family string, bin *models.Binary, yaraMatches []m
 	}
 	caps := capabilities.Detect(in, pk.State)
 	anoms := anomalies.Detect(in)
+	ssd, tl := similarity.Hash(data)
+	sketch := similarity.Sketch(func(yield func(string)) {
+		for _, h := range scan.Hits {
+			if len(h.Text) >= 8 {
+				yield(h.Text)
+			}
+		}
+	})
 	out := &models.Analysis{
+		Fuzzy:        models.Fuzzy{SSDeep: ssd, TLSH: tl, StringSketch: sketch},
 		Capabilities: caps,
 		Anomalies:    anoms,
 		Entropy:      ent,

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Yanliangchan/unpackr/internal/similarity"
 	"github.com/Yanliangchan/unpackr/internal/terminal"
 	"github.com/Yanliangchan/unpackr/pkg/models"
 )
@@ -547,6 +548,29 @@ func renderComparison(w io.Writer, c *models.Comparison, verbose bool, st termin
 	line("", c.Packing)
 	line("fingerprint", c.Fingerprint)
 	line("", c.Strings)
+	if sm := c.Similarity; sm != nil {
+		any = true
+		var parts []string
+		if sm.HasTLSH {
+			parts = append(parts, fmt.Sprintf("TLSH distance %d (%s)", sm.TLSHDistance, similarity.TLSHLabel(sm.TLSHDistance)))
+		}
+		if sm.HasSSDeep {
+			parts = append(parts, fmt.Sprintf("ssdeep %d (%s)", sm.SSDeepScore, similarity.SSDeepLabel(sm.SSDeepScore)))
+		}
+		if sm.HasOverlap {
+			parts = append(parts, fmt.Sprintf("structural overlap %.2f", sm.Overlap))
+		}
+		if len(parts) == 0 {
+			parts = append(parts, "not enough data to compare")
+		}
+		fmt.Fprintf(w, "    %-26s %s\n", "similarity", strings.Join(parts, "; "))
+		if verbose {
+			for _, comp := range sm.Components {
+				fmt.Fprintf(w, "      %-12s %.3f (weight %.2f)  %s\n", comp.Name, comp.Score, comp.Weight, st.Dim(safe(comp.Note)))
+			}
+		}
+		fmt.Fprintf(w, "    %s\n", st.Dim("measurements, not probabilities; none is evidence of a shared origin"))
+	}
 	for _, n := range c.Notes {
 		fmt.Fprintf(w, "    %s\n", st.Dim(safe(n)))
 	}

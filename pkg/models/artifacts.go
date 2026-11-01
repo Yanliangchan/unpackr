@@ -79,6 +79,7 @@ type Comparison struct {
 	Indicators     SetDiff       `json:"indicators"`
 	Strings        []Change      `json:"strings"`
 	Notes          []string      `json:"notes"`
+	Similarity     *Similarity   `json:"similarity,omitempty"`
 }
 
 // ExtractedEntry is one item found inside an embedded container.

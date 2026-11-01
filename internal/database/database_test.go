@@ -1,12 +1,15 @@
 package database
 
 import (
+	"bytes"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/Yanliangchan/unpackr/internal/similarity"
 	"github.com/Yanliangchan/unpackr/pkg/models"
 )
 
@@ -270,5 +273,80 @@ func TestHostsPivotAcrossDifferentURLs(t *testing.T) {
 	}
 	if refs, _ := d.Find("host", "c2.shared.example.xyz"); len(refs) != 2 {
 		t.Fatalf("%v", refs)
+	}
+}
+
+func fuzzyReport(sha, name string, data []byte, imports []string) *models.Report {
+	r := report(sha, name, "1", "unpacked")
+	ssd, tl := similarity.Hash(data)
+	r.Analysis.Fuzzy = models.Fuzzy{SSDeep: ssd, TLSH: tl}
+	im := models.Import{Library: "K.dll"}
+	for _, f := range imports {
+		im.Functions = append(im.Functions, models.ImportFn{Name: f})
+	}
+	r.Binary.Imports = []models.Import{im}
+	r.Binary.ImportHash = ""
+	r.Binary.Sections = nil
+	return r
+}
+
+func block(seed int64, n int) []byte {
+	b := make([]byte, n)
+	rand.New(rand.NewSource(seed)).Read(b)
+	return b
+}
+
+func TestSimilarRanksCloseSamplesFirst(t *testing.T) {
+	d := open(t)
+	base := append(append([]byte(nil), bytes.Repeat([]byte("alpha beta gamma delta "), 6000)...), block(1, 20000)...)
+	near := append([]byte(nil), base...)
+	copy(near[50000:], block(2, 4000))
+	far := append(bytes.Repeat([]byte("zzz yyy xxx www "), 7000), block(3, 20000)...)
+	apis := []string{"a", "b", "c", "d", "e", "f", "g", "h"}
+	for _, x := range []struct {
+		c    string
+		data []byte
+		imp  []string
+	}{{"b", near, apis}, {"c", far, []string{"p", "q", "r", "s", "t", "u"}}} {
+		if err := d.Record(fuzzyReport(sha(x.c), x.c+".exe", x.data, x.imp)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	q := fuzzyReport(sha("a"), "query.exe", base, apis)
+	hits, err := d.Similar(q, 5)
+	if err != nil || len(hits) == 0 {
+		t.Fatalf("%v %v", hits, err)
+	}
+	if hits[0].SHA256 != sha("b") {
+		t.Fatalf("the edited copy should rank first: %+v", hits[0])
+	}
+	for _, h := range hits {
+		if h.SHA256 == sha("a") {
+			t.Fatal("a sample must not be reported as similar to itself")
+		}
+	}
+	if !hits[0].Similarity.HasTLSH || hits[0].Similarity.TLSHDistance > 100 {
+		t.Fatalf("%+v", hits[0].Similarity)
+	}
+	// A limit is honoured and an empty database finds nothing.
+	if hits, _ := d.Similar(q, 1); len(hits) != 1 {
+		t.Fatalf("limit ignored: %d", len(hits))
+	}
+	if hits, err := open(t).Similar(q, 5); err != nil || len(hits) != 0 {
+		t.Fatalf("%v %v", hits, err)
+	}
+}
+
+func TestSimilarSurvivesGarbageInTheStore(t *testing.T) {
+	d := open(t)
+	_ = d.Record(fuzzyReport(sha("b"), "b.exe", block(5, 5000), []string{"a"}))
+	if _, err := d.SQL().Exec("UPDATE features SET value = 'T1zzzz' WHERE kind = 'tlsh'"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.SQL().Exec("INSERT INTO features(sha256, kind, value) VALUES (?, 'ssdeep', ?)", sha("b"), "garbage:::"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Similar(fuzzyReport(sha("a"), "a.exe", block(6, 5000), nil), 5); err != nil {
+		t.Fatalf("malformed stored hashes must be ignored, not fatal: %v", err)
 	}
 }
