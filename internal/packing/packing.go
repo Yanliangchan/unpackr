@@ -9,6 +9,7 @@ import (
 
 	"github.com/Yanliangchan/unpackr/internal/analysis"
 	"github.com/Yanliangchan/unpackr/internal/confidence"
+	"github.com/Yanliangchan/unpackr/internal/obfuscation"
 	"github.com/Yanliangchan/unpackr/pkg/models"
 )
 
@@ -74,6 +75,7 @@ func Assess(in *analysis.Input) models.PackingAssessment {
 	c.structure()
 	c.entropy()
 	c.dotnet()
+	c.decoded()
 
 	out.Signals = append(out.Signals, c.signals...)
 	return c.verdict(out)
@@ -169,6 +171,18 @@ func (c *collector) structure() {
 		ev := c.in.Sink.Add("imports", fmt.Sprintf("%d imported symbols including GetProcAddress and LoadLibrary", c.in.ImportCount()), -1, 0, "", "packing/sparse-imports", "structure:imports")
 		c.add("pack.sparse-imports", "very few imports, among them the pair needed to resolve everything else at run time", "moderate", "structure:imports", ev)
 	}
+	// ELF stub layout: a small loadable image that reserves far more memory
+	// than it holds (room to unpack into), with no interpreter or dynamic
+	// section. Packers that strip their own markers still leave this shape.
+	if b.Family() == "elf" && len(b.Sections) == 0 && c.in.Bin.Attributes["interpreter"] == "" {
+		for _, sg := range b.Segments {
+			if sg.Kind == "segment" && strings.Contains(sg.Perms, "w") && sg.VirtualSize >= 3*sg.RawSize && sg.VirtualSize-sg.RawSize >= 8192 {
+				ev := c.in.Sink.Add("segment", fmt.Sprintf("%s: %d bytes in the file, %d in memory, %s", sg.Name, sg.RawSize, sg.VirtualSize, sg.Perms), int64(sg.RawOffset), int64(sg.RawSize), "", "packing/elf-expanding-segment", "structure:elf-stub")
+				c.add("pack.elf.expanding-segment", "writable segment that reserves much more memory than the file supplies, in a file with no section headers or interpreter (the layout of an in-memory unpacker)", "moderate", "structure:elf-stub", ev)
+				break
+			}
+		}
+	}
 	// ELF/Mach-O with no section table.
 	if b.Family() == "elf" && len(b.Sections) == 0 {
 		ev := c.in.Sink.Add("header", "no section headers", -1, 0, "", "packing/no-section-headers", "structure:no-sections")
@@ -198,8 +212,54 @@ func (c *collector) entropy() {
 	}
 	if e.Overlay != nil && *e.Overlay >= HighEntropy && c.in.Bin.Overlay != nil && c.in.Bin.Overlay.Size >= 4096 {
 		ev := c.in.Sink.Add("entropy", fmt.Sprintf("overlay entropy %.2f", *e.Overlay), c.in.Bin.Overlay.Offset, c.in.Bin.Overlay.Size, "", "packing/high-entropy-overlay", "entropy")
-		c.add("pack.entropy.overlay", fmt.Sprintf("appended data has entropy %.2f", *e.Overlay), "weak", "entropy", ev)
+		strength, note := "weak", ""
+		if total := int64(len(c.in.Data)); total > 0 && c.in.Bin.Overlay.Size*4 >= total && *e.Overlay >= 7.5 {
+			// A large, near-random appended block is where a loader keeps an
+			// encrypted payload. Compressed archives and signed installers look
+			// the same, so this stays an entropy-family signal that cannot
+			// decide the verdict alone.
+			strength, note = "moderate", fmt.Sprintf("; it is %d%% of the file", c.in.Bin.Overlay.Size*100/total)
+		}
+		c.add("pack.entropy.overlay", fmt.Sprintf("appended data has entropy %.2f%s", *e.Overlay, note), strength, "entropy", ev)
 	}
+}
+
+// decoded turns recovered strings into signals. A string that decodes to a
+// known marker under a single-byte key is direct evidence that content is
+// kept encoded; a stack string is only counted when it contains such a marker,
+// because compilers also build short constant arrays on the stack.
+func (c *collector) decoded() {
+	var evs []string
+	n := map[string]int{}
+	for _, d := range c.in.Decoded {
+		if d.Evidence == "" {
+			continue
+		}
+		if d.Method == "stack" && !hasMarker(d.Text) {
+			continue
+		}
+		evs = append(evs, d.Evidence)
+		n[d.Method]++
+	}
+	if len(evs) == 0 {
+		return
+	}
+	var parts []string
+	for _, m := range []string{"xor", "add", "base64", "stack"} {
+		if n[m] > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n[m], m))
+		}
+	}
+	c.add("pack.encoded-strings", "text is kept out of plain sight and was recovered ("+strings.Join(parts, ", ")+")", "moderate", "encoding", evs...)
+}
+
+func hasMarker(s string) bool {
+	for _, m := range obfuscation.Markers() {
+		if strings.Contains(s, m) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *collector) dotnet() {
@@ -253,6 +313,20 @@ func (c *collector) verdict(out models.PackingAssessment) models.PackingAssessme
 		out.Notes = append(out.Notes, "an exact signature was found but nothing independent corroborates it")
 	case len(families) >= 2 && len(nonEntropy) >= 1 && hasAtLeast(sigs, "moderate", 2):
 		out.State, out.Family = models.PackLikely, best
+	case families["encoding"]:
+		// Concealed content was recovered, but nothing says the program body is
+		// packed. The state says what was found and no more.
+		out.State = models.PackObfuscated
+		conf = models.ConfidenceMedium
+		why = "stack-built text matched a known marker; assembled by byte pattern rather than disassembly"
+		for _, d := range c.in.Decoded {
+			if d.Method != "stack" {
+				conf = models.ConfidenceHigh
+				why = "a known marker decodes exactly under a single-byte key, so the text really is stored encoded"
+				break
+			}
+		}
+		out.Notes = append(out.Notes, "text is kept in a form the plain string scan does not see; only single-byte XOR/ADD, base64-embedded executables and stack-built strings are recovered, so other content may still be hidden")
 	case len(sigs) > 0:
 		out.State = models.PackUnknown
 		out.Notes = append(out.Notes, "indicators exist but are not sufficient to call the file packed; entropy alone or a single structural oddity is never a verdict")

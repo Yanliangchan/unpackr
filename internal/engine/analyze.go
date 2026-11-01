@@ -15,6 +15,7 @@ import (
 	"github.com/Yanliangchan/unpackr/internal/confidence"
 	"github.com/Yanliangchan/unpackr/internal/content"
 	"github.com/Yanliangchan/unpackr/internal/fingerprint"
+	"github.com/Yanliangchan/unpackr/internal/obfuscation"
 	"github.com/Yanliangchan/unpackr/internal/packing"
 	"github.com/Yanliangchan/unpackr/internal/similarity"
 	"github.com/Yanliangchan/unpackr/internal/worker"
@@ -97,6 +98,13 @@ func analyzeBytes(data []byte, family string, bin *models.Binary, yaraMatches []
 	sink := analysis.NewSink("analysis")
 	in := &analysis.Input{Data: data, Family: family, Bin: view, Scan: scan, Entropy: &ent, Sink: sink, Yara: yaraMatches}
 
+	decoded := obfuscation.Find(data)
+	for i := range decoded {
+		d := &decoded[i]
+		d.Evidence = sink.Add("decoded-string", d.Text, d.Offset, int64(d.Length), sectionOf(d.Offset), "obfuscation/"+d.Method, "decoded:"+d.Method)
+	}
+	in.Decoded = decoded
+
 	fp := fingerprint.Detect(in)
 	pk := packing.Assess(in)
 	if pk.State == models.PackConfirmed || pk.State == models.PackLikely {
@@ -130,7 +138,8 @@ func analyzeBytes(data []byte, family string, bin *models.Binary, yaraMatches []
 		Anomalies:    anoms,
 		Entropy:      ent,
 		Strings:      scan.Summarize(sectionOf),
-		Indicators:   content.ExtractIndicators(scan.Hits, sectionOf),
+		Indicators:   mergeDecodedIndicators(content.ExtractIndicators(scan.Hits, sectionOf), decoded, sectionOf),
+		Decoded:      nonNilDecoded(decoded),
 		Fingerprint:  fp,
 		Packing:      pk,
 		Evidence:     sink.Evidence,
@@ -174,6 +183,47 @@ func runAnalysis(ctx context.Context, f *os.File, size int64, rep *models.Report
 		rep.NotRun = append(rep.NotRun, NotRunFuzzy)
 	}
 	rep.NotRun = withoutStages(rep.NotRun, "entropy-analysis", "string-extraction", "indicator-extraction", "language-and-compiler-identification", "packing-assessment", "capability-inference", "anomaly-detection")
+}
+
+func nonNilDecoded(d []models.DecodedString) []models.DecodedString {
+	if d == nil {
+		return []models.DecodedString{}
+	}
+	return d
+}
+
+// mergeDecodedIndicators adds indicators found in recovered strings. They are
+// kept apart from ordinary string hits so their provenance stays visible.
+func mergeDecodedIndicators(ind []models.Indicator, dec []models.DecodedString, sectionOf func(int64) string) []models.Indicator {
+	var hits []content.Hit
+	for _, d := range dec {
+		if d.Method == "base64" {
+			continue
+		}
+		enc := "decoded:" + d.Method
+		if d.Key != "" {
+			enc += " " + d.Key
+		}
+		hits = append(hits, content.Hit{Offset: d.Offset, Enc: enc, Text: d.Text})
+	}
+	if len(hits) == 0 {
+		return ind
+	}
+	have := map[string]bool{}
+	for _, i := range ind {
+		have[i.Type+"\x00"+i.Value] = true
+	}
+	for _, n := range content.ExtractIndicators(hits, sectionOf) {
+		if have[n.Type+"\x00"+n.Value] {
+			continue
+		}
+		if n.Note != "" {
+			n.Note += "; "
+		}
+		n.Note += "recovered from an encoded form (" + n.Encoding + "), not visible as plain text"
+		ind = append(ind, n)
+	}
+	return ind
 }
 
 func withoutStages(all []string, drop ...string) []string {
@@ -245,6 +295,9 @@ func addAnalysisFindings(rep *models.Report, a *models.Analysis) {
 		action = "Do not trust imports, strings or capabilities of the packed file. Unpack a copy with the packer's own tool in an isolated environment and analyse the result."
 	case models.PackUnknown:
 		action = "Review the listed indicators manually; they were not enough to call the file packed."
+	case models.PackObfuscated:
+		sev = models.SeverityMedium
+		action = "Review the recovered strings. Other content may be hidden in forms this tool does not recover (multi-byte keys, RC4/AES, computed strings); dynamic analysis in an isolated lab is the next step."
 	}
 	rep.Findings = append(rep.Findings, models.Finding{
 		ID: "packing.state", Rule: "packing/assessment", Class: models.ClassInference,
@@ -272,6 +325,31 @@ func addAnalysisFindings(rep *models.Report, a *models.Analysis) {
 			Category: "capability", Title: "Possible capability: " + c.Name,
 			Summary: c.Summary, Severity: c.Severity, Confidence: c.Confidence, Rationale: c.Rationale,
 			EvidenceID: ev, Action: action, Attack: c.Attack,
+		})
+	}
+	for i, d := range a.Decoded {
+		if i >= 12 {
+			break
+		}
+		sev, conf, how := models.SeverityMedium, models.ConfidenceHigh, "decoding the bytes with the stated key reproduces this text exactly; the key was derived from a known marker, not guessed"
+		switch d.Method {
+		case "stack":
+			sev, conf = models.SeverityLow, models.ConfidenceMedium
+			how = "the text was assembled from consecutive constant stores matched by byte pattern, not by disassembly"
+		case "base64":
+			how = "the base64 run decodes cleanly and begins with an executable header"
+		}
+		title := "Hidden string recovered (" + d.Method
+		if d.Key != "" {
+			title += " key " + d.Key
+		}
+		title += ")"
+		rep.Findings = append(rep.Findings, models.Finding{
+			ID: uniq("obfuscation.decoded"), Rule: "obfuscation/" + d.Method, Class: models.ClassObservation,
+			Category: "obfuscation", Title: title, Summary: d.Text, Severity: sev, Confidence: conf,
+			Rationale:  how + ". Whether the author meant to conceal it is an inference.",
+			EvidenceID: []string{d.Evidence},
+			Action:     "Treat the recovered text like any other string: check its context before treating it as an indicator of compromise.",
 		})
 	}
 	for _, an := range a.Anomalies {
@@ -332,6 +410,8 @@ func packingSummary(p models.PackingAssessment) string {
 		s = "Several independent indicators point to packing or protection."
 	case models.PackUnknown:
 		s = "Some indicators were found but they do not justify a packed verdict."
+	case models.PackObfuscated:
+		s = "Text that the file keeps in an encoded form was recovered. This is not evidence that the program itself is compressed or encrypted."
 	case models.PackUnpacked:
 		s = "No packing indicators were found."
 	}

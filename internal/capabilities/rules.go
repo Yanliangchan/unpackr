@@ -95,6 +95,12 @@ var Rules = []Rule{
 			{"bitsadmin /transfer", "bitsadmin transfer", "moderate"}, {"msiexec /i http", "msiexec remote install", "moderate"},
 		}, Benign: "Installers call regsvr32 and rundll32 routinely."},
 
+	// ---- obfuscation
+	{ID: "evasion.dynamic-resolve", Name: "Run-time symbol resolution", Category: "obfuscation", Attack: []string{"T1027.007"},
+		Summary: "software that looks up functions by name while running, which hides them from the import table", Severity: models.SeverityLow,
+		Groups: []Group{g("resolve by name", "dlsym", "GetProcAddress", "LdrGetProcedureAddress", "dlvsym")},
+		Need:   1, Complete: "weak", Benign: "Plugin systems, language runtimes, graphics and audio libraries and compatibility shims resolve symbols this way."},
+
 	// ---- process injection
 	{ID: "inject.classic", Name: "Remote process memory write and execution", Category: "process injection", Attack: []string{"T1055"},
 		Summary: "the allocate, write and run-remotely sequence used by process injection", Severity: models.SeverityHigh, OS: []string{"pe"},

@@ -83,6 +83,10 @@ const (
 	PackLikely    = "likely-packed"
 	PackConfirmed = "confirmed-packed"
 	PackUnknown   = "unknown"
+	// PackObfuscated means content is concealed (for example encoded strings
+	// were recovered) but no packer was identified and nothing suggests the
+	// program body is compressed or encrypted.
+	PackObfuscated = "obfuscated"
 )
 
 // PackingAssessment answers "is anything concealed". Entropy alone can never
@@ -124,6 +128,19 @@ type ChainStep struct {
 	Label  string   `json:"label"`
 	APIs   []string `json:"apis"`
 	Source string   `json:"source"` // imported | string-referenced
+}
+
+// DecodedString is text recovered from bytes that are not plain in the file.
+// Method says how: the bytes at Offset really do decode this way (an
+// observation); whether the author meant to hide them is an inference.
+type DecodedString struct {
+	Method   string `json:"method"`        // xor | add | base64 | stack
+	Key      string `json:"key,omitempty"` // for xor and add, e.g. "0x5a"
+	Offset   int64  `json:"offset"`
+	Length   int    `json:"length"`
+	Text     string `json:"text"`
+	Matched  string `json:"matched,omitempty"` // the known marker that located it
+	Evidence string `json:"evidence,omitempty"`
 }
 
 // Anomaly is a structural oddity with an explanation of why it is notable and
@@ -178,6 +195,7 @@ type Analysis struct {
 	Packing      PackingAssessment `json:"packing"`
 	Capabilities []Capability      `json:"capabilities"`
 	Anomalies    []Anomaly         `json:"anomalies"`
+	Decoded      []DecodedString   `json:"decoded_strings"`
 	Evidence     []Evidence        `json:"evidence"`
 	Yara         []YaraMatch       `json:"yara_matches"`
 	Engines      []EngineStatus    `json:"engines"`
