@@ -12,6 +12,7 @@ unpackr art list | show <id> | categories | favourite <id> | favourites
 unpackr db path | stats | find <value> [--kind K] | forget <sha256>
 unpackr case new|list|add|note|search|timeline|close|reopen|report
 unpackr similar <file|sha256-prefix> [--limit N] [-v]
+unpackr inspect <file | report.json>
 unpackr completion bash|zsh|fish
 unpackr --version
 ```
@@ -148,3 +149,26 @@ with an apostrophe so spreadsheets do not execute them.
   `.`, `_`, `-`.
 - `case report <case> [-o file]`: markdown by default; `.html`, `.csv`, `.json`
   by extension or `--format`.
+
+## inspect
+
+`unpackr inspect <file | report.json>` opens an interactive view with six tabs
+(Summary, Findings, Evidence, Indicators, Capabilities, Structure). Keys: tab or
+1-6 switch tabs, up/down/pgup/pgdn/g/G move, `/` searches the current tab, `e`
+opens the evidence a finding or capability cites, `f` opens the findings that
+cite an evidence row, esc clears a search or filter, `?` help, `q` quit.
+
+- The argument is a file to analyse (same analysis as `-i`, recorded in the local
+  database like any other run) or a JSON report saved with `-o report.json`.
+- It needs an interactive terminal. Otherwise it exits with a usage error and
+  points to `-o`/`--format`.
+- The viewer is a separate executable, `unpackr-inspect`, installed next to
+  `unpackr` and started by it. The terminal UI library probes the terminal for
+  its background colour when it is linked into a program, so keeping it out of
+  the main binary means ordinary runs and `--version` never emit those queries.
+  The helper is found beside the running executable only, never on `PATH`.
+  It receives one already-sanitised report over an inherited pipe and opens no
+  files. Control and escape bytes in sample text are shown as visible escapes.
+- On a terminal that does not answer the colour query, starting `inspect` can
+  pause for a few seconds; this comes from the UI library's start-up probe and
+  only affects this command.

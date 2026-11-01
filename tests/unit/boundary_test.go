@@ -102,3 +102,20 @@ func TestStorageBoundaries(t *testing.T) {
 func TestSimilarityIsPureComputation(t *testing.T) {
 	mustNotImport(t, "internal/similarity", "internal/terminal", "internal/cli", "internal/artvault", "internal/engine", "internal/database", "internal/reporting", "internal/worker")
 }
+
+// The terminal UI library probes the terminal for its colours in a package
+// initialiser, so linking it into the main binary would make every run
+// (including --version) emit escape queries and possibly wait for an answer.
+// The viewer therefore lives in its own executable.
+func TestMainBinaryDoesNotLinkTheTerminalUI(t *testing.T) {
+	for _, d := range deps(t, "cmd/unpackr") {
+		if strings.HasPrefix(d, "github.com/charmbracelet/") || strings.HasPrefix(d, "github.com/muesli/termenv") || d == mod+"internal/tui" {
+			t.Errorf("cmd/unpackr links %s; keep the viewer in cmd/unpackr-inspect", d)
+		}
+	}
+}
+
+// The viewer opens no files and runs no analysis: it only needs the model.
+func TestViewerIsSelfContained(t *testing.T) {
+	mustNotImport(t, "cmd/unpackr-inspect", "internal/engine", "internal/database", "internal/worker", "internal/cli", "internal/safety")
+}

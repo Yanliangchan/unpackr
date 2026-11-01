@@ -9,6 +9,7 @@ PREFIX  ?= /usr/local
 
 build:
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN) ./cmd/unpackr
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN)-inspect ./cmd/unpackr-inspect
 
 test:
 	$(GO) vet ./...
@@ -26,9 +27,10 @@ bench:
 install: build
 	install -d $(DESTDIR)$(PREFIX)/bin
 	install -m 0755 $(BIN) $(DESTDIR)$(PREFIX)/bin/unpackr
+	install -m 0755 $(BIN)-inspect $(DESTDIR)$(PREFIX)/bin/unpackr-inspect
 
 uninstall:
-	rm -f $(DESTDIR)$(PREFIX)/bin/unpackr
+	rm -f $(DESTDIR)$(PREFIX)/bin/unpackr $(DESTDIR)$(PREFIX)/bin/unpackr-inspect
 
 package:
 	packaging/build-deb.sh $(VERSION) amd64

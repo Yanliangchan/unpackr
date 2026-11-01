@@ -13,6 +13,8 @@ mkdir -p "$out" "$stage/usr/bin" "$stage/usr/share/man/man1" "$stage/DEBIAN" \
   "$stage/usr/share/fish/vendor_completions.d" "$stage/usr/share/doc/unpackr"
 (cd "$root" && CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath \
   -ldflags "-s -w -X github.com/Yanliangchan/unpackr/internal/version.Version=$ver" -o "$stage/usr/bin/unpackr" ./cmd/unpackr)
+(cd "$root" && CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath \
+  -ldflags "-s -w -X github.com/Yanliangchan/unpackr/internal/version.Version=$ver" -o "$stage/usr/bin/unpackr-inspect" ./cmd/unpackr-inspect)
 # Generated assets come from a host-native build (the binary may be arm64).
 gen="$(mktemp -d)"
 (cd "$root" && CGO_ENABLED=0 go run -ldflags "-X github.com/Yanliangchan/unpackr/internal/version.Version=$ver" ./cmd/unpackr gen-packaging --dir "$gen" --date "$date_iso")
@@ -28,6 +30,6 @@ size=$(du -sk "$stage/usr" | cut -f1)
 sed -e "s/@VERSION@/$ver/" -e "s/@ARCH@/$arch/" -e "s/@SIZE@/$size/" "$root/packaging/debian/control" > "$stage/DEBIAN/control"
 find "$stage" -exec touch -h -d "@$epoch" {} +
 find "$stage" -type d -exec chmod 0755 {} +
-chmod 0755 "$stage/usr/bin/unpackr"
+chmod 0755 "$stage/usr/bin/unpackr" "$stage/usr/bin/unpackr-inspect"
 dpkg-deb --root-owner-group -Zxz --build "$stage" "$out/unpackr_${ver}_${arch}.deb" >/dev/null
 echo "$out/unpackr_${ver}_${arch}.deb"

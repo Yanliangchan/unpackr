@@ -12,3 +12,12 @@ elastic/go-seccomp-bpf.
 External programs (`upx`, `yr`/YARA-X) are **not** bundled in this package.
 They are discovered on `PATH` at run time and executed only inside the
 confined exec worker.
+
+## Interactive viewer (`unpackr-inspect` only)
+
+charmbracelet/bubbletea, lipgloss and x/ansi, x/term, x/cellbuf, colorprofile,
+muesli/termenv, ansi and cancelreader, mattn/go-runewidth and go-isatty,
+rivo/uniseg, xo/terminfo, erikgeiser/coninput, lucasb-eyer/go-colorful,
+aymanbagabas/go-osc52: all MIT. `mattn/go-localereader` ships no LICENSE file;
+its README states MIT. These are linked into `unpackr-inspect` only, not into
+the main `unpackr` binary.
