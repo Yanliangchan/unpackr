@@ -297,7 +297,7 @@ func renderAnalysis(w io.Writer, r *models.Report, verbose bool, st terminal.Sty
 	switch state {
 	case models.PackConfirmed, models.PackLikely:
 		state = st.Red(state)
-	case models.PackUnknown:
+	case models.PackUnknown, models.PackObfuscated:
 		state = st.Yellow(state)
 	default:
 		state = st.Green(state)
@@ -322,6 +322,17 @@ func renderAnalysis(w io.Writer, r *models.Report, verbose bool, st terminal.Sty
 				}
 			}
 		}
+	}
+	for i, d := range a.Decoded {
+		if i == 8 {
+			fmt.Fprintf(w, "  %-10s … and %d more recovered strings (see the report)\n", "", len(a.Decoded)-i)
+			break
+		}
+		how := d.Method
+		if d.Key != "" {
+			how += " key " + d.Key
+		}
+		fmt.Fprintf(w, "  %-10s ⟲ recovered at 0x%x (%s): %s\n", "Hidden", d.Offset, how, safe(head(d.Text, 100)))
 	}
 	fmt.Fprintf(w, "  %-10s %.3f bits/byte over the whole file", "Entropy", a.Entropy.File)
 	if a.Entropy.Overlay != nil {
@@ -707,4 +718,13 @@ func orDash(s string) string {
 		return "-"
 	}
 	return s
+}
+
+// head shortens s to at most n runes, marking the cut.
+func head(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
 }

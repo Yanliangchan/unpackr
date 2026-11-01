@@ -22,6 +22,9 @@ type Input struct {
 	// Yara holds matches from the optional YARA-X engine. Only matches with
 	// Status "tested" may be used as evidence.
 	Yara []models.YaraMatch
+	// Decoded are strings recovered from encoded forms; each already has an
+	// evidence record (DecodedString.Evidence).
+	Decoded []models.DecodedString
 }
 
 // Sink collects evidence and hands out stable identifiers.
