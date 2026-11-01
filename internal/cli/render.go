@@ -460,6 +460,9 @@ func renderCapabilities(w io.Writer, a *models.Analysis, verbose bool, st termin
 }
 
 func renderAnomalies(w io.Writer, a *models.Analysis, verbose bool, st terminal.Style) {
+	if rv := a.Reverse; rv != nil {
+		renderReverse(w, rv, verbose, st)
+	}
 	fmt.Fprintf(w, "\n  %s\n", st.Bold(fmt.Sprintf("Structural anomalies (%d)", len(a.Anomalies))))
 	if len(a.Anomalies) == 0 {
 		fmt.Fprintf(w, "  %s\n", st.Dim("none found"))
@@ -803,4 +806,50 @@ func byteSize(n int) string {
 		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
 	}
 	return fmt.Sprintf("%d bytes", n)
+}
+
+func renderReverse(w io.Writer, rv *models.Reverse, verbose bool, st terminal.Style) {
+	title := "Reverse engineering"
+	if rv.Version != "" {
+		title += " (" + safe(rv.Engine) + " " + safe(rv.Version) + ")"
+	}
+	fmt.Fprintf(w, "\n  %s\n", st.Bold(title))
+	if rv.Skipped != "" {
+		fmt.Fprintf(w, "  %s\n", st.Dim("skipped: "+safe(rv.Skipped)))
+		return
+	}
+	fmt.Fprintf(w, "  %-12s %d discovered", "Functions", rv.Functions)
+	if rv.Entry != "" {
+		fmt.Fprintf(w, "; the entry point is in %s", safe(rv.Entry))
+	}
+	fmt.Fprintln(w)
+	limit := 5
+	if verbose {
+		limit = 10
+	}
+	for i, f := range rv.Largest {
+		if i >= limit {
+			break
+		}
+		fmt.Fprintf(w, "  %-12s %s (%d bytes, %d blocks) at 0x%x\n", map[bool]string{true: "Largest", false: ""}[i == 0], safe(f.Name), f.Size, f.Blocks, f.VA)
+	}
+	if len(rv.CallSites) > 0 {
+		fmt.Fprintf(w, "  %s\n", st.Dim("Where imported APIs are referenced (virtual addresses; a reference may be in code that never runs):"))
+		shown := 0
+		for _, c := range rv.CallSites {
+			if shown >= 12 && !verbose {
+				fmt.Fprintf(w, "    … and %d more (use -v)\n", len(rv.CallSites)-shown)
+				break
+			}
+			shown++
+			fn := c.Function
+			if fn == "" {
+				fn = "(no function)"
+			}
+			fmt.Fprintf(w, "    %-28s %-5s in %s at 0x%x\n", clip(safe(c.API), 28), c.Kind, safe(fn), c.At)
+		}
+	}
+	for _, n := range rv.Notes {
+		fmt.Fprintf(w, "  %s\n", st.Dim(safe(n)))
+	}
 }

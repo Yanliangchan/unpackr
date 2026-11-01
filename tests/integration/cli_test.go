@@ -221,13 +221,14 @@ func TestBatchDirectoryAndOutputDir(t *testing.T) {
 	}
 }
 
-func TestUnimplementedFeaturesAreRefusedNotFaked(t *testing.T) {
+// -r needs radare2. Without it the run still succeeds and says plainly that the
+// stage did not run, instead of looking clean.
+func TestReverseWithoutRadare2SaysSoAndIsNotFaked(t *testing.T) {
 	p := write(t, t.TempDir(), "s", samplePE(), 0o600)
-	for _, flag := range []string{"-r"} {
-		r := run(t, "-i", p, flag)
-		if r.code != 4 || r.stdout != "" {
-			t.Errorf("%s: code %d stdout %q", flag, r.code, r.stdout)
-		}
+	t.Setenv("PATH", t.TempDir())
+	r := run(t, "-r", p)
+	if r.code != 0 || !strings.Contains(r.stdout, "skipped:") {
+		t.Errorf("code %d\n%s", r.code, r.stdout)
 	}
 }
 

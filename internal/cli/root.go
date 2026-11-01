@@ -193,7 +193,7 @@ func (g *globals) run(cmd *cobra.Command, args []string) error {
 	case plan.Deep:
 		profile = engine.ProfileDeep
 	}
-	opts := engine.Options{Config: cfg, Profile: profile, Modules: plan.Modules, Unpack: plan.Unpack, Extract: plan.Extract, ArtifactDir: plan.OutputDir, UserRuleDir: userRuleDir()}
+	opts := engine.Options{Config: cfg, Profile: profile, Modules: plan.Modules, Unpack: plan.Unpack, Extract: plan.Extract, ArtifactDir: plan.OutputDir, UserRuleDir: userRuleDir(), Reverse: plan.Reverse}
 
 	ctx, stop := signalContext()
 	defer stop()

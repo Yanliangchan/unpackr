@@ -46,6 +46,8 @@ type Options struct {
 	YaraName string
 	// UserRuleDir holds analyst-supplied YARA rules (never read implicitly by the engine).
 	UserRuleDir string
+	// Reverse asks radare2 where imported APIs are referenced (needs radare2).
+	Reverse bool
 	// Depth is the current unpacking depth; used internally for nested layers.
 	Depth int
 }

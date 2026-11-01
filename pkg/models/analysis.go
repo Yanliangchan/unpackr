@@ -197,6 +197,7 @@ type Analysis struct {
 	Anomalies    []Anomaly         `json:"anomalies"`
 	Decoded      []DecodedString   `json:"decoded_strings"`
 	Disasm       *Disassembly      `json:"disassembly,omitempty"`
+	Reverse      *Reverse          `json:"reverse,omitempty"`
 	Evidence     []Evidence        `json:"evidence"`
 	Yara         []YaraMatch       `json:"yara_matches"`
 	Engines      []EngineStatus    `json:"engines"`
@@ -250,5 +251,41 @@ type DisasmSite struct {
 	Kind     string `json:"kind"` // peb-access | peb-ldr-walk | api-hash-ror13 | state-dispatcher
 	Offset   int64  `json:"file_offset"`
 	Detail   string `json:"detail"`
+	Evidence string `json:"evidence,omitempty"`
+}
+
+// Reverse is what an external reverse-engineering engine (radare2) reported
+// for the -r profile. Addresses are virtual addresses in the engine's view of
+// the loaded image, not file offsets. Everything here is the engine's output,
+// parsed strictly; it is as trustworthy as that engine's analysis of a possibly
+// hostile file.
+type Reverse struct {
+	Engine    string        `json:"engine"`
+	Version   string        `json:"version,omitempty"`
+	Skipped   string        `json:"skipped,omitempty"` // why nothing was run
+	Functions int           `json:"functions"`
+	Entry     string        `json:"entry_function,omitempty"`
+	Largest   []ReverseFunc `json:"largest_functions,omitempty"`
+	CallSites []ReverseCall `json:"call_sites,omitempty"`
+	Notes     []string      `json:"notes,omitempty"`
+	Truncated bool          `json:"truncated,omitempty"`
+}
+
+// ReverseFunc is a function the engine discovered.
+type ReverseFunc struct {
+	Name   string `json:"name"`
+	VA     uint64 `json:"va"`
+	Size   int    `json:"size"`
+	Blocks int    `json:"basic_blocks"`
+}
+
+// ReverseCall is a place in the code that refers to an imported API.
+type ReverseCall struct {
+	API      string `json:"api"`
+	Library  string `json:"library,omitempty"`
+	Function string `json:"function,omitempty"` // the function containing the reference
+	FuncVA   uint64 `json:"function_va,omitempty"`
+	At       uint64 `json:"at_va"`
+	Kind     string `json:"kind"` // call | jump | data
 	Evidence string `json:"evidence,omitempty"`
 }

@@ -27,6 +27,9 @@ import (
 // NotRunCodePatterns is reported unless the deep profile ran the disassembly pass.
 const NotRunCodePatterns = "code-pattern-analysis: not run; use -d for the bounded disassembly pass that looks for PEB module walking, API-name hash loops and control-flow flattening (x86 and x86-64)"
 
+// NotRunReverse is reported unless -r ran the radare2 stage.
+const NotRunReverse = "reverse-engineering: not run; use -r to ask radare2 which functions reference each imported API (ELF and PE; needs radare2 installed)"
+
 // NotRunFuzzy is reported when the quick profile skipped similarity hashing.
 const NotRunFuzzy = "fuzzy-hashing: skipped by the quick profile (ssdeep, TLSH and the string sketch are empty, which does not mean the file is unique)"
 
@@ -195,6 +198,9 @@ func runAnalysis(ctx context.Context, f *os.File, size int64, rep *models.Report
 	}
 	rep.Analysis = &a
 	rep.Evidence = append(rep.Evidence, a.Evidence...)
+	if o.Reverse {
+		runReverse(ctx, f, size, rep, &a, o)
+	}
 	addAnalysisFindings(rep, &a)
 	if o.Profile == ProfileQuick {
 		rep.NotRun = append(rep.NotRun, NotRunFuzzy)
@@ -204,6 +210,9 @@ func runAnalysis(ctx context.Context, f *os.File, size int64, rep *models.Report
 		rep.NotRun = append(rep.NotRun, NotRunCodePatterns)
 	case a.Disasm != nil && a.Disasm.Skipped != "":
 		rep.NotRun = append(rep.NotRun, "code-pattern-analysis: skipped: "+a.Disasm.Skipped)
+	}
+	if !o.Reverse {
+		rep.NotRun = append(rep.NotRun, NotRunReverse)
 	}
 	rep.NotRun = withoutStages(rep.NotRun, "entropy-analysis", "string-extraction", "indicator-extraction", "language-and-compiler-identification", "packing-assessment", "capability-inference", "anomaly-detection")
 }
@@ -457,6 +466,55 @@ func addAnalysisFindings(rep *models.Report, a *models.Analysis) {
 				Rationale:  "the instruction pattern is present in the disassembly; what it is used for is not known, and the same idiom can occur in legitimate code",
 				EvidenceID: ev,
 				Action:     "Open the code at these offsets in a disassembler to see what the routine does.",
+			})
+		}
+	}
+	if rv := a.Reverse; rv != nil && rv.Skipped == "" {
+		byAPI := map[string][]models.ReverseCall{}
+		var order []string
+		for _, c := range rv.CallSites {
+			if _, ok := byAPI[c.API]; !ok {
+				order = append(order, c.API)
+			}
+			byAPI[c.API] = append(byAPI[c.API], c)
+		}
+		for _, api := range order {
+			cs := byAPI[api]
+			var where, ev []string
+			for _, c := range cs {
+				if len(where) < 4 {
+					fn := c.Function
+					if fn == "" {
+						fn = "(no function)"
+					}
+					where = append(where, fmt.Sprintf("%s at 0x%x (%s)", fn, c.At, c.Kind))
+				}
+				if c.Evidence != "" && len(ev) < 5 {
+					ev = append(ev, c.Evidence)
+				}
+			}
+			rep.Findings = append(rep.Findings, models.Finding{
+				ID: uniq("reverse.callsite"), Rule: "reverse/callsite", Class: models.ClassObservation,
+				Category: "reverse", Title: fmt.Sprintf("%s is referenced %d time(s) in the code", api, len(cs)),
+				Summary:  "radare2 found references from: " + joinComma(where) + ".",
+				Severity: models.SeverityInfo, Confidence: models.ConfidenceMedium,
+				Rationale:  "radare2 found the reference by static analysis of the code; code that never runs, or a reference that is only apparent, would look the same",
+				EvidenceID: ev,
+				Action:     "Open these functions in a disassembler to see what is passed to the API.",
+			})
+		}
+		if rv.Functions > 0 {
+			sum := fmt.Sprintf("radare2 %s found %d function(s)", rv.Version, rv.Functions)
+			if rv.Entry != "" {
+				sum += "; the entry point is in " + rv.Entry
+			}
+			if len(rv.Largest) > 0 {
+				sum += fmt.Sprintf("; the largest is %s (%d bytes)", rv.Largest[0].Name, rv.Largest[0].Size)
+			}
+			rep.Findings = append(rep.Findings, models.Finding{
+				ID: "reverse.functions", Rule: "reverse/functions", Class: models.ClassObservation, Category: "reverse",
+				Title: "Function analysis", Summary: sum + ".", Severity: models.SeverityInfo, Confidence: models.ConfidenceMedium,
+				Rationale: "function discovery is heuristic: radare2 can miss functions or split one in two, particularly in packed or obfuscated code", EvidenceID: []string{},
 			})
 		}
 	}

@@ -262,3 +262,24 @@ emulation is available where this was developed. Not verified: Kali on real
 hardware or a virtual machine, installation through a Kali ISO or repository
 mirror, and `apt` dependency behaviour on release candidates of those
 distributions.
+
+
+## Addendum: radare2 adapter (findings that changed the design)
+
+Verified on radare2 5.5.0 (Ubuntu 24.04 package) with a gcc-built ELF and a
+MinGW-built PE; the adapter's tests run the real tool inside the exec sandbox.
+
+* `radare2 -S` ("sandbox mode") did **not** stop `!cmd`; `-e cfg.sandbox=true`
+  does, but only once the file is open (set at start-up, radare2 cannot open the
+  sample). Even then a `!` inside backticks ran. So the strict name allow-list is
+  the defence, and the process sandbox is the backstop.
+* `>>` is radare2's append-redirect: a marker such as `<<X>>` printed as `<<X` and
+  created a file. Markers are now plain words carrying a random token.
+* `afl` adds a `-> N` column for some functions; the parser handles it.
+* Progress output prefixes lines with an ANSI "clear line" sequence; it is stripped
+  before parsing.
+* On a PE, `axtj sym.imp.LIB.dll_Name` finds the references; the packed
+  `putty.exe` in the PE library's test data gave none, which was the file, not the
+  tool (a MinGW-built program resolves correctly).
+* Not verified: Rizin, Mach-O, any radare2 other than 5.5.0 (Kali ships a newer
+  one), 32-bit PE, and large or packed samples.
