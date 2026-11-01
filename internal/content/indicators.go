@@ -99,7 +99,7 @@ func ExtractIndicators(hits []Hit, sectionOf func(off int64) string) []models.In
 			}
 			add("ipv4", m[1], h, note)
 		}
-		if g.dot && !reModulePath.MatchString(rest) {
+		if g.tld && !reModulePath.MatchString(rest) {
 			for _, m := range reDomain.FindAllStringSubmatchIndex(rest, -1) {
 				d := rest[m[2]:m[3]]
 				// Skip identifiers such as system.net.http or file names.
@@ -182,10 +182,10 @@ func hostOf(u string) string {
 // pattern contains the literal it is guarded by in all of its alternatives, so
 // a failed guard proves there is no match and the regexp is skipped. This is
 // an optimisation only; TestGuardsAreNecessary checks it cannot hide a match.
-type guards struct{ dot, at, drive, unc, slash, bs, space bool }
+type guards struct{ dot, tld, at, drive, unc, slash, bs, space bool }
 
 func guardsFor(s string) guards {
-	return guards{
+	g := guards{
 		dot:   strings.IndexByte(s, '.') >= 0,
 		at:    strings.IndexByte(s, '@') >= 0,
 		drive: strings.Contains(s, ":\\"),
@@ -194,6 +194,40 @@ func guardsFor(s string) guards {
 		bs:    strings.IndexByte(s, '\\') >= 0,
 		space: strings.ContainsAny(s, " \t\n\f\r"),
 	}
+	g.tld = g.dot && hasTLDAfterDot(s)
+	return g
+}
+
+var tldSet, tldMaxLen = func() (map[string]bool, int) {
+	m, longest := map[string]bool{}, 0
+	for _, t := range strings.Split(TLDs, "|") {
+		m[t] = true
+		longest = max(longest, len(t))
+	}
+	return m, longest
+}()
+
+func isWord(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_'
+}
+
+// hasTLDAfterDot is the necessary condition for reDomain: its final "\.TLD\b"
+// means some dot is followed by a run of word characters that is exactly one
+// of the TLDs (the run must end at a word boundary).
+func hasTLDAfterDot(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] != '.' {
+			continue
+		}
+		j := i + 1
+		for j < len(s) && isWord(s[j]) {
+			j++
+		}
+		if j-i-1 <= tldMaxLen && tldSet[s[i+1:j]] {
+			return true
+		}
+	}
+	return false
 }
 
 func (g guards) find(ok bool, re *regexp.Regexp, s string) []string {

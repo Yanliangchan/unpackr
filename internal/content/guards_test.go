@@ -8,7 +8,7 @@ import (
 
 // A failed guard must imply that the pattern cannot match.
 func TestGuardsAreNecessary(t *testing.T) {
-	alphabet := []string{"a", "Z", "0", "9", ".", "@", ":", "\\", "/", " ", "\t", "-", "_", "$", "http", "://", "HKLM", "cmd", "C:", "etc", "tmp", "net user", "curl -", "x.com"}
+	alphabet := []string{"a", "Z", "0", "9", ".", "@", ":", "\\", "/", " ", "\t", "-", "_", "$", "http", "://", "HKLM", "cmd", "com", "net", "ru", ".com", ".ru", ".org", "xn", "onion", "C:", "etc", "tmp", "net user", "curl -", "x.com"}
 	rng := rand.New(rand.NewSource(1))
 	checks := []struct {
 		name string
@@ -16,7 +16,7 @@ func TestGuardsAreNecessary(t *testing.T) {
 		ok   func(guards) bool
 	}{
 		{"ipv4", reIPv4, func(g guards) bool { return g.dot }},
-		{"domain", reDomain, func(g guards) bool { return g.dot }},
+		{"domain", reDomain, func(g guards) bool { return g.tld }},
 		{"email", reEmail, func(g guards) bool { return g.at }},
 		{"winpath", reWinPath, func(g guards) bool { return g.drive }},
 		{"unc", reUNC, func(g guards) bool { return g.unc }},
