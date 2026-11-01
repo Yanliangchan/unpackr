@@ -5,7 +5,7 @@ VERSION ?= 0.1.0
 LDFLAGS := -s -w -X github.com/Yanliangchan/unpackr/internal/version.Version=$(VERSION)
 PREFIX  ?= /usr/local
 
-.PHONY: build test lint fuzz install uninstall clean package
+.PHONY: build test lint fuzz bench install uninstall clean package
 
 build:
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN) ./cmd/unpackr
@@ -19,6 +19,9 @@ lint:
 
 fuzz:
 	$(GO) test ./internal/identification -run '^$$' -fuzz FuzzIdentify -fuzztime 30s
+
+bench:
+	$(GO) test ./internal/engine ./internal/obfuscation ./internal/content -run '^$$' -bench . -benchmem -benchtime 5x
 
 install: build
 	install -d $(DESTDIR)$(PREFIX)/bin
