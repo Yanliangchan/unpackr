@@ -190,3 +190,9 @@ func sanitizedComparison(c *models.Comparison, defang bool) *models.Comparison {
 	copyValue(out.Elem(), reflect.ValueOf(*c), fn)
 	return out.Interface().(*models.Comparison)
 }
+
+// Sanitized returns a deep copy of r that is safe to print to a terminal:
+// control and escape bytes are made visible and bidirectional overrides are
+// neutralised. With defang, network-looking text is also defanged. The
+// original report is not modified.
+func Sanitized(r *models.Report, defang bool) *models.Report { return sanitized(r, defang) }

@@ -224,3 +224,16 @@ capa run, unblob extraction on the fixtures, UPX 5.x build, 7zz build, kernel
 unprivileged-userns and Landlock matrix on Kali, Python-bytecode decompiler
 coverage per Python version. Until then these adapters are marked unverified and
 none of them is on the critical path for the first release.
+
+
+## Addendum: Bubble Tea start-up probe
+
+Verified while building `inspect`: bubbletea v1.3.10 has a package initialiser
+(`tea_init.go`) that calls `lipgloss.HasDarkBackground()`, which writes an
+`ESC ] 11 ; ?` colour query and an `ESC [ 6 n` cursor query to the terminal and
+waits for the reply. Linking the library therefore affects every run of the
+program, not only the interactive command. Decision: keep it in a separate
+executable (`unpackr-inspect`) and enforce that with a boundary test
+(`TestMainBinaryDoesNotLinkTheTerminalUI`). The v2 line, which the plan said to
+check, is noted in the library's own source as removing this workaround; it was
+not evaluated here.
