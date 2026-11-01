@@ -1,0 +1,17 @@
+---
+id: 063
+category: picture
+title: Penguin with root
+---
+             ______________________________________________
+            / sudo make me a sandwich. Then run strings on \
+            \ the sandwich.                                /
+             ----------------------------------------------
+                 \
+                  \    .--.
+                       |o_o |
+                       |:_/ |
+                      //   \ \
+                     (|     | )
+                    /'\_   _/`\
+                    \___)=(___/

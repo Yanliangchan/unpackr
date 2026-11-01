@@ -1,0 +1,14 @@
+---
+id: 062
+category: picture
+title: Cow reads assembly
+---
+   ______________________________________________
+  / mov eax, 1 ; moo(v). It is the first line of \
+  \ assembly every cow learns.                   /
+   ----------------------------------------------
+          \   ^__^
+           \  (oo)\_______
+              (__)\       )\/\
+                  ||----w |
+                  ||     ||

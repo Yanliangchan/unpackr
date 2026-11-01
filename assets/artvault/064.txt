@@ -1,0 +1,19 @@
+---
+id: 064
+category: picture
+title: Skull and crossbones
+---
+          .-"      "-.
+         /            \
+        |              |
+        |,  .-.  .-.  ,|
+        | )(__/  \__)( |
+        |/     /\     \|
+        (_     ^^     _)
+         \__|IIIIII|__/
+          | \IIIIII/ |
+          \          /
+           `--------`
+
+      We read malware. We never run it.
+      Static analysis: all of the curiosity, none of the infection.

@@ -1,0 +1,16 @@
+---
+id: 070
+category: picture
+title: Launch sequence
+---
+                /\
+               /  \
+              |    |
+              | () |        $ ./exploit --target moon
+              |    |        > permission denied
+             /|    |\       $ sudo !!
+            / |    | \      > this is a static analyser.
+           /__|____|__\       we only read the blueprints.
+              /_/\_\
+               ||||
+              ~~~~~~

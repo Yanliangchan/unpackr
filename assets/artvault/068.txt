@@ -1,0 +1,16 @@
+---
+id: 068
+category: picture
+title: Magnifier over MZ
+---
+            .-""""""-.
+          .'  ______  '.
+         /   /      \   \
+        |   |  4d 5a |   |       Know what's inside.
+        |   |  M  Z  |   |
+         \   \______/   /        0000: 4d5a 9000 0300 0000 0400 0000
+          '.          .'         0010: b800 0000 0000 0000 4000 0000
+            '-......-'           0020: 0000 0000 0000 0000 0000 0000
+                  \\
+                   \\             every Windows executable starts with
+                    \\            initials: MZ, for Mark Zbikowski

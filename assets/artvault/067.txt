@@ -1,0 +1,13 @@
+---
+id: 067
+category: picture
+title: Not a bug
+---
+            \   /
+             \_/
+          .-/o o\-.
+         /  \_^_/  \        It is not a bug.
+        ( ( |   | ) )       It is an indicator of compromise.
+         \_\|___|/_/
+           /     \          (bugs that phone home are called features
+          /       \          by the people who wrote them)

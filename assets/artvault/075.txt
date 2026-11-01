@@ -1,0 +1,18 @@
+---
+id: 075
+category: picture
+title: Schrodinger binary
+---
+        +-------------------------------+
+       /                               /|
+      +-------------------------------+ |
+      |                               | |
+      |      the sample is both       | |
+      |   packed and not packed       | |
+      |   until you open it           | |
+      |                      ?        | +
+      |                               |/
+      +-------------------------------+
+
+      unpackr opens the box with a validated unpack,
+      and only then says "definitive".

@@ -1,0 +1,12 @@
+---
+id: 073
+category: picture
+title: Sandbox-aware cat
+---
+       /\_/\
+      ( o.o )        meow.exe
+       > ^ <         - checks for a VM:      yes
+      /|   |\        - checks for a debugger: yes
+     (_|   |_)       - behaves badly:         only when nobody is watching
+
+      we are not watching. we are reading.
