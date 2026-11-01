@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Yanliangchan/unpackr/internal/formats/elf"
 	"io"
 	"os"
 	"os/exec"
@@ -188,7 +189,10 @@ func structuralChecks(parent, child *models.Report, differs bool) []models.Valid
 	if pb != nil {
 		add("same file format family", pb.Family() == cb.Family(), pb.Format+" -> "+cb.Format)
 		add("same architecture", pb.Arch == cb.Arch, pb.Arch+" -> "+cb.Arch)
-		add("same kind (executable/library)", pb.Kind == cb.Kind, pb.Kind+" -> "+cb.Kind)
+		// A packed ET_DYN file often cannot be classified (packer stubs have no
+		// interpreter or dynamic section); the unpacked kind is then the evidence.
+		kindOK := pb.Kind == cb.Kind || (pb.Kind == elf.KindAmbiguous && (cb.Kind == "executable" || cb.Kind == "library"))
+		add("same kind (executable/library)", kindOK, pb.Kind+" -> "+cb.Kind)
 	}
 	entryOK := cb.Entry != nil && (cb.Entry.Section != "" || cb.Entry.FileOffset != nil)
 	detail := "entry point not mapped"
