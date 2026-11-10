@@ -19,7 +19,7 @@ func renderReport(w io.Writer, r *models.Report, verbose bool, st terminal.Style
 	h := func(t string) { _, _ = fmt.Fprintf(w, "\n%s\n", st.Bold(st.Cyan(t))) }
 	kv := func(k, v string) { _, _ = fmt.Fprintf(w, "  %-10s %s\n", k, v) }
 
-	h("Stage 01 · File identification")
+	h("File identification")
 	kv("File", fmt.Sprintf("%s (%d bytes)", safe(r.File.Name), r.File.Size))
 	kv("SHA256", r.File.Hashes.SHA256)
 	kv("SHA1", r.File.Hashes.SHA1)
@@ -290,12 +290,12 @@ func renderAnalysis(w io.Writer, r *models.Report, verbose bool, st terminal.Sty
 	a := r.Analysis
 	h := func(t string) { fmt.Fprintf(w, "\n%s\n", st.Bold(st.Cyan(t))) }
 
-	h("Stage 02 · Technical fingerprint")
+	h("Technical fingerprint")
 	renderHyps(w, "Language", a.Fingerprint.Languages, verbose, st)
 	renderHyps(w, "Compiler", a.Fingerprint.Compilers, verbose, st)
 	renderHyps(w, "Runtime", a.Fingerprint.Runtimes, verbose, st)
 
-	h("Stage 03 · Packing and obfuscation")
+	h("Packing and obfuscation")
 	state := a.Packing.State
 	switch state {
 	case models.PackConfirmed, models.PackLikely:
@@ -367,7 +367,7 @@ func renderAnalysis(w io.Writer, r *models.Report, verbose bool, st terminal.Sty
 
 	renderYara(w, a, verbose, st)
 
-	h("Stage 04 · Static intelligence")
+	h("Static intelligence")
 	fmt.Fprintf(w, "  %-10s %d found (%d ASCII, %d UTF-16); showing %d in JSON output\n", "Strings", a.Strings.Total, a.Strings.ASCII, a.Strings.UTF16, len(a.Strings.Shown))
 	renderCapabilities(w, a, verbose, st)
 	renderAnomalies(w, a, verbose, st)

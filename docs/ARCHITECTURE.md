@@ -651,7 +651,7 @@ Authenticode validation).
 
 ---
 
-## 19. Phased implementation roadmap (milestones)
+## 19. Implementation roadmap (milestones)
 
 Each milestone leaves the tool usable and ends with tests, a security review, a
 performance check, doc updates and an honest list of what remains.
