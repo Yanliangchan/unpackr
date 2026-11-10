@@ -26,7 +26,7 @@ type Config struct {
 	ExtractMaxMB      int64   `yaml:"extract_max_mb"`      // total extracted bytes per container
 	ExtractMaxEntries int     `yaml:"extract_max_entries"` // entries per container
 	UseDatabase       bool    `yaml:"use_database"`        // remember analysed files locally
-	DatabasePath      string  `yaml:"database_path"`       // default $XDG_DATA_HOME/unpackr/db.sqlite
+	DatabasePath      string  `yaml:"database_path"`       // default $XDG_DATA_HOME/unpackr/db.json
 	Banner            string  `yaml:"banner"`              // random | NNN | category | off
 }
 

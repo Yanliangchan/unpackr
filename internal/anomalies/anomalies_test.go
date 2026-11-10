@@ -2,6 +2,7 @@ package anomalies
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/Yanliangchan/unpackr/internal/analysis"
@@ -177,5 +178,52 @@ func TestMachOTextWritable(t *testing.T) {
 func TestNilBinary(t *testing.T) {
 	if got := run([]byte("x"), nil); len(got) != 0 {
 		t.Fatal(got)
+	}
+}
+
+// Seen on a real sample: a 37 MB DLL whose export table is flooded and whose
+// import thunks point outside the file. The parser records the facts; these
+// rules make sure they are not buried as information.
+func TestHostileTableStructuresAreReported(t *testing.T) {
+	b := &models.Binary{Format: "PE32", Attributes: map[string]string{}, Exports: make([]models.Export, 100000),
+		Anomalies: []string{"export list truncated at 100000 entries", "Export directory contains many repeated entries", "Thunk AddressOfData beyond limits"}}
+	got := ids(Detect(&analysis.Input{Data: make([]byte, 4096), Bin: b, Sink: analysis.NewSink("t")}))
+	for _, id := range []string{"pe.exports.flooded", "pe.imports.unreadable"} {
+		a, ok := got[id]
+		if !ok || a.Severity != models.SeverityMedium {
+			t.Errorf("%s missing or not medium: %+v", id, a)
+		}
+	}
+	// Repeated export entries alone are not reported: Microsoft's own mfc140u.dll
+	// exports many aliases of one function and would be flagged.
+	b2 := &models.Binary{Format: "PE32", Attributes: map[string]string{}, Anomalies: []string{"Export directory contains many repeated entries"}}
+	for id := range ids(Detect(&analysis.Input{Data: make([]byte, 4096), Bin: b2, Sink: analysis.NewSink("t")})) {
+		if strings.HasPrefix(id, "pe.exports") {
+			t.Errorf("repetition alone must not be reported: %s", id)
+		}
+	}
+	// A clean file reports none of them.
+	clean := ids(Detect(&analysis.Input{Data: make([]byte, 4096), Bin: &models.Binary{Format: "PE32", Attributes: map[string]string{}}, Sink: analysis.NewSink("t")}))
+	for _, id := range []string{"pe.exports.flooded", "pe.imports.unreadable", "file.mostly-padding", "pe.directories.outside-image"} {
+		if _, ok := clean[id]; ok {
+			t.Errorf("false report of %s", id)
+		}
+	}
+}
+
+func TestMostlyPaddingNeedsBothSizeAndLowEntropy(t *testing.T) {
+	big := make([]byte, 20<<20)
+	low, high := 1.6, 6.5
+	mk := func(data []byte, e float64) map[string]models.Anomaly {
+		return ids(Detect(&analysis.Input{Data: data, Bin: &models.Binary{Format: "PE32", Attributes: map[string]string{}}, Entropy: &models.EntropyInfo{File: e}, Sink: analysis.NewSink("t")}))
+	}
+	if _, ok := mk(big, low)["file.mostly-padding"]; !ok {
+		t.Error("a 20 MiB file at 1.6 bits per byte should be reported")
+	}
+	if _, ok := mk(big, high)["file.mostly-padding"]; ok {
+		t.Error("high entropy is not padding")
+	}
+	if _, ok := mk(make([]byte, 1<<20), low)["file.mostly-padding"]; ok {
+		t.Error("a small low-entropy file is ordinary")
 	}
 }

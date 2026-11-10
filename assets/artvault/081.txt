@@ -1,0 +1,21 @@
+---
+id: 081
+category: picture
+title: C2 beacon lighthouse
+style: gold
+---
+                      \  |  /
+                  ---   .-.   ---
+                     /  |_|  \
+                     |  | |  |
+              ~~~~~~ |__|_|__| ~~~~~~
+                      |  _  |
+                      | |_| |
+                      |     |        beacon interval: 60s +/- 10% jitter
+                      |  _  |        a lighthouse that wants to be found
+                      | |_| |        by exactly one ship
+                      |     |
+                     /|_____|\
+                ____/_________\____
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

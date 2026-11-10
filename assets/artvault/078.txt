@@ -1,0 +1,23 @@
+---
+id: 078
+category: picture
+title: Kraken of imports
+style: ocean
+---
+                    ___________
+               .--'            '--.
+              /    __       __     \
+             |    (  )     (  )     |
+             |     ''  ___  ''      |
+              \       (___)         /
+               '--.___________.--'
+       ~~~~~~~~~~/ / / | | | \ \ \~~~~~~~~~~
+       ~~~~~~~~/ / /  / | \  \ \ \~~~~~~~~~~~
+       ~~~~~~~| | |  /  |  \  | | |~~~~~~~~~~
+       ~~~~~~~| | | |   |   | | | |~~~~~~~~~~
+       ~~~~~~~~\ \ \ \  |  / / / /~~~~~~~~~~~
+       ~~~~~~~~~'-'-'  '-'  '-'-'~~~~~~~~~~~~
+
+      every tentacle is an import:
+         CreateRemoteThread   WriteProcessMemory   VirtualAllocEx
+      the kraken is only dangerous if it uses them.

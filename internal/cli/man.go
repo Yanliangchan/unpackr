@@ -86,7 +86,7 @@ func WriteMan(w io.Writer, root *cobra.Command, date string) error {
 		}
 	}
 	p(".SH EXIT STATUS\n.TP\n.B 0\nSuccess.\n.TP\n.B 1\nAn input could not be analysed.\n.TP\n.B 2\nUsage error.\n.TP\n.B 4\nA valid request that this build does not implement.\n")
-	p(".SH FILES\n.TP\n.I $XDG_CONFIG_HOME/unpackr/config.yaml\nConfiguration.\n.TP\n.I $XDG_CONFIG_HOME/unpackr/rules/\nAnalyst YARA rules (never counted as evidence).\n.TP\n.I $XDG_CONFIG_HOME/unpackr/artvault/custom/\nCustom banners.\n.TP\n.I $XDG_DATA_HOME/unpackr/db.sqlite\nLocal sample memory: hashes, reports and notes, never samples.\n")
+	p(".SH FILES\n.TP\n.I $XDG_CONFIG_HOME/unpackr/config.yaml\nConfiguration.\n.TP\n.I $XDG_CONFIG_HOME/unpackr/rules/\nAnalyst YARA rules (never counted as evidence).\n.TP\n.I $XDG_CONFIG_HOME/unpackr/artvault/custom/\nCustom banners.\n.TP\n.I $XDG_DATA_HOME/unpackr/db.json\nLocal sample memory: hashes, reports and notes, never samples.\n")
 	p(".SH SECURITY\n%s\n", roff("Every analysed file is treated as hostile. Parsing and external tools run in separate processes that confine themselves with Landlock and seccomp before touching input; if confinement cannot be established the tool is not run. Run `unpackr doctor` to see what the current system provides. Extracted and unpacked files are written without execute permission and are never run. Reports defang network indicators and sanitise every string taken from a sample."))
 	p(".SH SEE ALSO\nupx(1), yr(1), capa(1), ghidra(1)\n.PP\nFull documentation: /usr/share/doc/unpackr/\n")
 	_, err := io.WriteString(w, b.String())

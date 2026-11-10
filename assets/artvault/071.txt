@@ -1,0 +1,15 @@
+---
+id: 071
+category: picture
+title: Padlock with the key taped on
+style: gold
+---
+            .-""-.
+           /  __  \
+          |  /  \  |
+          |  |  |  |
+       .--'--'--'--'--.
+       |    XOR 0x41   |        single-byte XOR:
+       |      (O)     |        the lock with its key taped to the door.
+       |      |_|     |
+       '---------------'        UNPACKR finds the key without being told it.

@@ -24,11 +24,11 @@ Peak memory is about 22 MB for a 2 MB scan; inputs are read once and capped at
 
 ## Binary size
 
-14.6 MB stripped; the amd64 `.deb` is 4.5 MB compressed.
+11.0 MB stripped (it was 15.3 MB while the sample database used SQLite); xz-compressed it is 3.2 MB (4.7 MB before), plus 1.1 MB for the viewer.
 
 | Part | Size | Notes |
 |---|---|---|
-| code (`.text`) | 7.0 MB | SQLite (pure Go) is about 2.6 MB of this |
+| code (`.text`) | 7.0 MB |  |
 | Go function tables (`.gopclntab`) | 5.0 MB | scales with code size |
 | read-only data | 1.7 MB | rules, banners, tables |
 
@@ -38,3 +38,15 @@ break the pure-Go static build and the sandbox model. `html/template` is about
 70 KB and `crypto/x509` about 107 KB (pulled in by the PE parser for
 Authenticode). Compressing the executable with a packer was rejected: a malware
 analysis tool should not look like packed software.
+
+### Why the sample database is not SQLite
+
+SQLite (pure Go, `modernc.org/sqlite`) alone added about 4.4 MB to the
+executable; a Go program that only opens it is already 6.4 MB. The database is
+small and single-user, so it is now a JSON index (`db.json`) plus one gzip file
+per stored report (`db.json.reports/<sha256>/<n>.json.gz`). Writes go to a
+temporary file that is synced and renamed over the old one, and a lock file
+(`flock`, released by the kernel if a process dies) makes concurrent runs take
+turns: eight parallel analyses were checked to all be recorded. The index is
+read whole on open, so it suits thousands of samples, not millions. An older
+`db.sqlite` is not read; point `database_path` at it only to find it again.

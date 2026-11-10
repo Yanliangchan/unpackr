@@ -1,0 +1,23 @@
+---
+id: 084
+category: picture
+title: Onion of obfuscation
+style: plasma
+---
+                    _
+                   ( \
+                 .--\ '--.
+              .-'    \    '-.
+            .'   .----'.     '.
+           /   .'  .--. '.     \
+          /   /   /    \  \     \
+         |   |   |  ()  |  |     |
+         |   |   |  /\  |  |     |
+          \   \   \_||_/  /     /
+           \   '.  '--'  .'    /
+            '.   '------'    .'
+              '-.        .-'
+                 '------'
+
+      packed in a crypter, in a packer, in a base64 string,
+      in a XOR. every layer you peel makes you cry a little less.

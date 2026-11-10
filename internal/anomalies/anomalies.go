@@ -42,6 +42,7 @@ func Detect(in *analysis.Input) []models.Anomaly {
 		c.macho()
 	}
 	c.overlay()
+	c.hostileStructures()
 	if c.out == nil {
 		return []models.Anomaly{}
 	}
@@ -331,3 +332,43 @@ func min64(a, b int64) int64 {
 }
 
 func overlap(a, al, b, bl uint64) bool { return a < b+bl && b < a+al }
+
+// hostileStructures reports header tables that are broken in ways ordinary
+// toolchains do not produce and that stall or mislead analysis tools. They are
+// facts about the bytes; the parser has already bounded its own work on them.
+func (c *collector) hostileStructures() {
+	b := c.in.Bin
+	if b == nil {
+		return
+	}
+	has := func(sub string) (string, bool) {
+		for _, a := range b.Anomalies {
+			if strings.Contains(strings.ToLower(a), sub) {
+				return a, true
+			}
+		}
+		return "", false
+	}
+	if a, ok := has("export list truncated"); ok {
+		c.add("pe.exports.flooded", fmt.Sprintf("The export table is enormous (%d entries read; the rest were not)", len(b.Exports)),
+			"Programs do not normally export a hundred thousand names, least of all repeated ones. A flooded export table makes tools slow, exhausts their memory, and buries real exports, and some packers and file bloaters do it on purpose.",
+			"Very large frameworks export tens of thousands of names; repeated entries are not normal.",
+			models.SeverityMedium, "header", a, -1, 0, "")
+	}
+	if a, ok := has("thunk addressofdata beyond limits"); ok {
+		c.add("pe.imports.unreadable", "Import table entries point outside the file",
+			"The Windows loader and analysis tools read the import table differently when its entries are out of bounds, so a tool may report no imports for a program that has them, or fewer than the loader resolves. Imports-based findings are therefore unreliable for this file.",
+			"Corrupted or truncated downloads.", models.SeverityMedium, "header", a, -1, 0, "")
+	}
+	if a, ok := has("lies outside the image"); ok {
+		c.add("pe.directories.outside-image", "A data directory points outside the image",
+			"The loader and analysis tools disagree about what such a file contains. A directory entry that is garbage (for example a .NET header address of about 1.4 billion in a 4 MB file) makes simple type checks, which trust the directory, misreport the file.",
+			"A damaged or truncated file.", models.SeverityMedium, "header", a, -1, 0, "")
+	}
+	// A file that is mostly padding: a very low entropy over a large size.
+	if e := c.in.Entropy; e != nil && len(c.in.Data) >= 16<<20 && e.File < 2.0 {
+		c.add("file.mostly-padding", fmt.Sprintf("A %d MiB file with entropy %.2f bits per byte is mostly padding", len(c.in.Data)>>20, e.File),
+			"Padding a file to tens of megabytes keeps it below no real size limit but above the limit many scanners and upload services apply, and it dilutes statistics such as entropy and string density.",
+			"Debug builds, sparse installers and images with large uninitialised regions.", models.SeverityLow, "entropy", fmt.Sprintf("file entropy %.3f", e.File), -1, 0, "")
+	}
+}

@@ -1,0 +1,15 @@
+---
+id: 072
+category: picture
+title: Coffee-driven analysis
+style: sunset
+---
+            ( (
+             ) )
+          ........
+          |      |]          while (!understood(binary)) {
+          \      /               coffee++;
+           `----'                strings(binary);
+                              }
+
+       reverse engineering is a caffeine-to-knowledge converter

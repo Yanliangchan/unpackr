@@ -2,7 +2,10 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"slices"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -18,6 +21,27 @@ func loadVault() (*artvault.Vault, []error, error) {
 
 func newArtCmd(g *globals) *cobra.Command {
 	art := &cobra.Command{Use: "art", Short: "Browse the ArtVault banner library"}
+	var styleName string
+	show := &cobra.Command{Use: "show <id>", Short: "Display one banner", Args: usageArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
+		v, _, err := loadVault()
+		if err != nil {
+			return err
+		}
+		b, ok := v.Get(args[0])
+		if !ok {
+			return usagef("no banner with id %q (try 'unpackr art list')", args[0])
+		}
+		if styleName != "" && !slices.Contains(artvault.StyleNames(), styleName) {
+			return usagef("unknown style %q (styles: %s)", styleName, strings.Join(artvault.StyleNames(), ", "))
+		}
+		depth := artvault.DepthNone
+		if terminal.ColorEnabled(os.Stdout, g.noColor) {
+			depth = artvault.DetectDepth()
+		}
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), artvault.Paint(b, styleName, depth))
+		return nil
+	}}
+	show.Flags().StringVar(&styleName, "style", "", "colour style to try: "+strings.Join(artvault.StyleNames(), ", "))
 	art.AddCommand(
 		&cobra.Command{Use: "list", Short: "List all banners", Args: usageArgs(cobra.NoArgs), RunE: func(cmd *cobra.Command, _ []string) error {
 			v, warns, err := loadVault()
@@ -41,18 +65,7 @@ func newArtCmd(g *globals) *cobra.Command {
 			}
 			return nil
 		}},
-		&cobra.Command{Use: "show <id>", Short: "Display one banner", Args: usageArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
-			v, _, err := loadVault()
-			if err != nil {
-				return err
-			}
-			b, ok := v.Get(args[0])
-			if !ok {
-				return usagef("no banner with id %q (try 'unpackr art list')", args[0])
-			}
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), b.Text())
-			return nil
-		}},
+		show,
 		&cobra.Command{Use: "categories", Short: "List banner categories", Args: usageArgs(cobra.NoArgs), RunE: func(cmd *cobra.Command, _ []string) error {
 			v, _, err := loadVault()
 			if err != nil {

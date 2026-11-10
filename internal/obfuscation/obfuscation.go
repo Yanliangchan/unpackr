@@ -168,12 +168,26 @@ func findDiff(data []byte) []models.DecodedString {
 			if !ok || kb == 0 {
 				continue // kb == 0 is plain text; the ordinary string scan covers it
 			}
-			perMarker[md.name+m]++
 			// A recovered string starts at its marker and runs forward.
 			hi := i + len(m)
 			for hi < len(data) && hi-i < 512 && !paddingRun(data, hi) && printable(md.dec(data[hi], kb)) {
 				hi++
 			}
+			// XOR 0x20 and ADD/SUB 0x20 only change the case of ASCII letters, so
+			// "WININET.DLL" would "decode" to "wininet.dll". That is ordinary text,
+			// not a hidden string, and the two cannot be told apart.
+			if (md.name == "xor" && kb == 0x20) || (md.name == "add" && (kb == 0x20 || kb == 0xE0)) {
+				continue
+			}
+			// A short marker on its own is what chance produces in a large file.
+			// A real hidden string continues (a path, a URL, an argument), or is a
+			// whole name of seven or more characters that ends at a terminator.
+			terminated := hi < len(data) && md.dec(data[hi], kb) == 0
+			wholeName := len(m) >= 7 && terminated
+			if hi-i < len(m)+4 && !wholeName {
+				continue
+			}
+			perMarker[md.name+m]++
 			text := make([]byte, hi-i)
 			for j := range text {
 				text[j] = md.dec(data[i+j], kb)
